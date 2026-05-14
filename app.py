@@ -5,11 +5,10 @@ import urllib.parse
 st.set_page_config(page_title="Carranza Control v1.0", layout="wide")
 
 # Caché agresivo para máxima velocidad
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner="Sincronizando con Auditoría...") 
 def get_data(url):
-    df = pd.read_csv(url)
-    df.columns = df.columns.str.strip().str.lower()
-    return df
+    # 'engine=c' acelera la lectura y 'low_memory=False' evita escaneos lentos
+    return pd.read_csv(url, engine='c', low_memory=False)
 
 try:
     SHEET_URL = st.secrets["general"]["sheet_url"]
