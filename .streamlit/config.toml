@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#D4AF37" # Dorado (Color de auditoría/oro/valor)
+backgroundColor = "#0E1117" # Negro profundo (Elegante)
+secondaryBackgroundColor = "#262730" # Gris oscuro
+textColor = "#FAFAFA"
+font = "sans serif"
