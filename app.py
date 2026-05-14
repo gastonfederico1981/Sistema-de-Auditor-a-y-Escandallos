@@ -73,55 +73,46 @@ if menu == "Dashboard":
 
 elif menu == "Inventario":
     st.title("📦 Carga de Insumos por Escaneo")
-    st.write("Capturá el remito para actualizar el stock en Drive.")
-
+    
+    # Poné la cámara fuera de cualquier columna o contenedor complejo primero
     foto = st.camera_input("📷 Sacale una foto al remito o factura")
 
     if foto:
-        st.success("Imagen capturada. Procesando datos para auditoría...")
+        st.success("Imagen capturada.")
         
+        # Recién acá cargamos los datos para evitar que el selector 
+        # aparezca y desaparezca rompiendo el nodo de JS
         try:
             df_datos = get_data()
             lista_insumos = df_datos['nombre'].tolist()
-        except:
-            lista_insumos = ["Cargá datos en tu Excel primero"]
-
-        with st.container():
-            st.subheader("Confirmación de Datos")
-            col1, col2, col3 = st.columns(3)
             
-            insumo_sel = col1.selectbox("Insumo", lista_insumos)
-            cantidad_sel = col2.number_input("Cantidad", min_value=0.0, value=1.0)
-            precio_sel = col3.number_input("Precio Unitario", min_value=0.0, value=0.0)
-
-            # Lógica de inyección de datos
-            link_dinamico = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
-            link_dinamico = link_dinamico.replace("111", str(cantidad_sel))
-            link_dinamico = link_dinamico.replace("222", str(precio_sel))
-
-            st.markdown(f"""
-                <div style="text-align: center; padding: 20px;">
-                    <a href="{link_dinamico}" target="_blank" style="text-decoration: none;">
-                        <button style="
-                            background-color: #D4AF37;
-                            color: black;
-                            padding: 15px 30px;
-                            border: none;
-                            border-radius: 10px;
-                            font-weight: bold;
-                            font-size: 18px;
-                            cursor: pointer;
-                            width: 100%;
-                            box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
-                        ">
+            # Usá un contenedor fijo para los selectores
+            with st.form("confirmacion_datos"):
+                st.subheader("Confirmación de Datos")
+                c1, c2, c3 = st.columns(3)
+                insumo_sel = c1.selectbox("Insumo", lista_insumos)
+                cantidad_sel = c2.number_input("Cantidad", min_value=0.0, value=1.0)
+                precio_sel = c3.number_input("Precio Unitario", min_value=0.0, value=0.0)
+                
+                # Un botón de formulario ayuda a que Streamlit no intente 
+                # redibujar todo con cada tecla que tocás
+                confirmar = st.form_submit_button("Generar Enlace de Carga")
+                
+            if confirmar:
+                import urllib.parse
+                link_dinamico = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
+                link_dinamico = link_dinamico.replace("111", str(cantidad_sel))
+                link_dinamico = link_dinamico.replace("222", str(precio_sel))
+                
+                st.markdown(f"""
+                    <a href="{link_dinamico}" target="_blank">
+                        <button style="background-color: #D4AF37; color: black; padding: 15px; border-radius: 10px; width: 100%; font-weight: bold;">
                             🚀 VALIDAR E INYECTAR A DRIVE
                         </button>
                     </a>
-                </div>
-            """, unsafe_allow_html=True)
-
-    st.divider()
-    st.info("💡 **Tip de Auditor:** Al usar el formulario, los datos quedan registrados con fecha y hora exacta.")
+                """, unsafe_allow_html=True)
+        except Exception as e:
+            st.error("Error al cargar la lista de insumos.")
 
 elif menu == "Escandallos":
     st.title("🍳 Calculadora de Fichas Técnicas")
