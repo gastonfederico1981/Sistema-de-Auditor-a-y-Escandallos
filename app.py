@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 
-st.set_page_config(page_title="Carranza Control v1.0", layout="wide")
+st.set_page_config(page_title="Carranza Control v1.1", layout="wide")
 
-# 1. Caché ultra-rápido para evitar esperas
+# Caché forzado para evitar latencia de red
 @st.cache_data(ttl=3600)
 def get_data(url):
     df = pd.read_csv(url, engine='c', low_memory=False)
@@ -23,33 +23,32 @@ menu = st.sidebar.radio("Navegación", ["Dashboard", "Inventario", "Escandallos"
 if menu == "Inventario":
     st.title("📦 Carga de Insumos")
     
-    # 2. El truco del 'key' único evita que JS se confunda de nodo
-    archivo = st.file_uploader("📁 Subir remito", type=["jpg", "png", "jpeg"], key="uploader_auditoria")
+    # Usar un contenedor st.empty ayuda a que Streamlit gestione mejor el borrado de nodos
+    contenedor_carga = st.empty()
+    
+    with contenedor_carga.container():
+        # La clave 'uploader_v2' asegura que no se use el nodo viejo de la cámara
+        archivo = st.file_uploader("📁 Subir remito", type=["jpg", "png", "jpeg"], key="uploader_v2")
 
-    if archivo:
-        # Usamos un contenedor vacío para estabilizar la carga visual
-        placeholder = st.empty()
-        with placeholder.container():
+        if archivo:
             st.image(archivo, width=250)
-            
             try:
                 df = get_data(SHEET_URL)
-                # El formulario 'congela' la UI para evitar el error de removeChild
-                with st.form("validador_estricto", clear_on_submit=True):
-                    st.subheader("Validación de Auditoría")
+                # El formulario aísla los widgets para que no refresquen la app constantemente
+                with st.form("validador_final_2"):
+                    st.subheader("Datos para Drive")
                     c1, c2, c3 = st.columns(3)
                     insumo_sel = c1.selectbox("Insumo", df['nombre'].tolist())
-                    cantidad_sel = c2.number_input("Cantidad", value=1.0, step=0.1)
-                    precio_sel = c3.number_input("Precio Unitario", value=0.0, step=0.1)
-                    confirmar = st.form_submit_button("Generar Enlace Final")
+                    cantidad_sel = c2.number_input("Cantidad", value=1.0)
+                    precio_sel = c3.number_input("Precio Unitario", value=0.0)
+                    confirmar = st.form_submit_button("Generar Enlace")
                     
                 if confirmar:
                     link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
                     link = link.replace("111", str(cantidad_sel)).replace("222", str(precio_sel))
-                    st.success("✅ Datos listos para inyectar")
-                    st.markdown(f'<a href="{link}" target="_blank"><button style="background-color:#D4AF37;color:black;padding:15px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;">🚀 ENVIAR A GOOGLE DRIVE</button></a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="{link}" target="_blank"><button style="background-color:#D4AF37;color:black;padding:15px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;">🚀 VALIDAR EN DRIVE</button></a>', unsafe_allow_html=True)
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error("Error de base de datos.")
 
 # ... (Dashboard y otros módulos)
             # ... resto del formulario con st.form ...
