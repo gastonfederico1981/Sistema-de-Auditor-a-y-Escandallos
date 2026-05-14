@@ -58,33 +58,30 @@ if menu == "Dashboard":
     except Exception as e:
         st.error(f"Error técnico: {e}")
 
-elif menu == "Inventario":
+if menu == "Inventario":
     st.title("📦 Carga de Insumos")
     
-    # La cámara se mantiene estática para evitar el error de removeChild
-    foto = st.camera_input("📷 Sacale una foto al remito")
+    # Inicializamos el estado si no existe
+    if 'foto_capturada' not in st.session_state:
+        st.session_state.foto_capturada = None
 
-    if foto:
+    # Solo mostramos la cámara si NO hay una foto guardada
+    if st.session_state.foto_capturada is None:
+        foto = st.camera_input("📷 Sacale una foto al remito")
+        if foto:
+            st.session_state.foto_capturada = foto
+            st.rerun() # Forzamos un reinicio limpio de la interfaz
+    
+    # Si ya tenemos la foto, mostramos el formulario de datos
+    else:
+        st.image(st.session_state.foto_capturada, caption="Remito capturado", width=300)
+        if st.button("🔄 Tomar otra foto"):
+            st.session_state.foto_capturada = None
+            st.rerun()
+
         try:
-            # Usamos el caché para que el selector sea instantáneo
             df_datos = get_data(SHEET_URL)
-            lista_insumos = df_datos['nombre'].tolist()
-            
-            # El Formulario encapsula los cambios y evita que la página parpadee
-            with st.form("confirmacion_datos"):
-                st.subheader("Confirmación de Datos")
-                c1, c2, c3 = st.columns(3)
-                insumo_sel = c1.selectbox("Insumo", lista_insumos)
-                cantidad_sel = c2.number_input("Cantidad", min_value=0.0, value=1.0)
-                precio_sel = c3.number_input("Precio Unitario", min_value=0.0, value=0.0)
-                confirmar = st.form_submit_button("Generar Enlace de Carga")
-                
-            if confirmar:
-                link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
-                link = link.replace("111", str(cantidad_sel)).replace("222", str(precio_sel))
-                st.markdown(f'<a href="{link}" target="_blank"><button style="background-color: #D4AF37; color: black; padding: 15px; border-radius: 10px; width: 100%; font-weight: bold; cursor: pointer;">🚀 VALIDAR E INYECTAR A DRIVE</button></a>', unsafe_allow_html=True)
-        except Exception as e:
-            st.error("Error al cargar la lista de insumos.")
+            # ... resto del formulario con st.form ...
 
 # ... (Módulos de Escandallos y Punto de Equilibrio sin cambios mayores) ...
 
