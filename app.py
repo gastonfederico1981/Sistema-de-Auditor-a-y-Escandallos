@@ -2,53 +2,76 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 
-st.set_page_config(page_title="Carranza Control v1.1", layout="wide")
+# 1. Configuración de página y caché
+st.set_page_config(page_title="Carranza Auditoría", layout="wide")
 
-# Caché forzado para evitar latencia de red
 @st.cache_data(ttl=3600)
 def get_data(url):
     df = pd.read_csv(url, engine='c', low_memory=False)
     df.columns = df.columns.str.strip().str.lower()
     return df
 
-try:
-    SHEET_URL = st.secrets["general"]["sheet_url"]
-    LINK_PRE_RELLENADO = st.secrets["general"]["form_url"]
-except:
-    SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTtRbAmRk1QRuV5yF0aQn-V31F553pSGK5RDhQcYywYY6CN2wfuBZvg3g2hGeO9rMtG745FVavNnZZW/pub?output=csv"
-    LINK_PRE_RELLENADO = "https://docs.google.com/forms/d/e/1FAIpQLSeBmsQmnlf5BzEUKDHtatfb9d7QjB2A2Cohvn4-oUPHMUk4Wg/viewform?usp=pp_url&entry.445714982=NOMBRE&entry.992341123=111&entry.1041327483=222"
+# 2. Gestión de Sesión (Login de Alumno)
+if 'alumno' not in st.session_state:
+    st.session_state.alumno = None
 
-menu = st.sidebar.radio("Navegación", ["Dashboard", "Inventario", "Escandallos", "Punto de Equilibrio"])
+if st.session_state.alumno is None:
+    st.title("💎 Carranza Control | Acceso")
+    nombre = st.text_input("Ingrese su Nombre y Apellido para comenzar:")
+    if st.button("Iniciar Auditoría") and nombre:
+        st.session_state.alumno = nombre
+        st.rerun() # Limpia la interfaz para el nuevo usuario
+    st.stop() # Detiene la ejecución hasta que se identifique
 
+# 3. Sidebar Personalizado
+st.sidebar.title(f"👤 {st.session_state.alumno}")
+if st.sidebar.button("Cerrar Sesión"):
+    st.session_state.alumno = None
+    st.rerun()
+
+menu = st.sidebar.radio("Navegación", ["Dashboard", "Inventario", "Escandallos"])
+
+# 4. Módulo de Inventario con Claves Únicas por Alumno
 if menu == "Inventario":
     st.title("📦 Carga de Insumos")
     
-    # Usar un contenedor st.empty ayuda a que Streamlit gestione mejor el borrado de nodos
-    contenedor_carga = st.empty()
-    
-    with contenedor_carga.container():
-        # La clave 'uploader_v2' asegura que no se use el nodo viejo de la cámara
-        archivo = st.file_uploader("📁 Subir remito", type=["jpg", "png", "jpeg"], key="uploader_v2")
+    # El uso de 'key' basado en el nombre del alumno evita el error de removeChild
+    id_unico = f"uploader_{st.session_state.alumno.replace(' ', '_')}"
+    archivo = st.file_uploader("📁 Subir remito", type=["jpg", "png", "jpeg"], key=id_unico)
 
-        if archivo:
-            st.image(archivo, width=250)
-            try:
-                df = get_data(SHEET_URL)
-                # El formulario aísla los widgets para que no refresquen la app constantemente
-                with st.form("validador_final_2"):
-                    st.subheader("Datos para Drive")
-                    c1, c2, c3 = st.columns(3)
-                    insumo_sel = c1.selectbox("Insumo", df['nombre'].tolist())
-                    cantidad_sel = c2.number_input("Cantidad", value=1.0)
-                    precio_sel = c3.number_input("Precio Unitario", value=0.0)
-                    confirmar = st.form_submit_button("Generar Enlace")
-                    
-                if confirmar:
-                    link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
-                    link = link.replace("111", str(cantidad_sel)).replace("222", str(precio_sel))
-                    st.markdown(f'<a href="{link}" target="_blank"><button style="background-color:#D4AF37;color:black;padding:15px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;">🚀 VALIDAR EN DRIVE</button></a>', unsafe_allow_html=True)
-            except Exception as e:
-                st.error("Error de base de datos.")
+    if archivo:
+        st.image(archivo, width=250)
+        try:
+            # Los secretos se mantienen centralizados
+            SHEET_URL = st.secrets["general"]["sheet_url"]
+            LINK_BASE = st.secrets["general"]["form_url"]
+            
+            df = get_data(SHEET_URL)
+            
+            with st.form(f"form_{st.session_state.alumno}"):
+                st.subheader("Confirmación de Datos")
+                c1, c2, c3 = st.columns(3)
+                insumo = c1.selectbox("Insumo", df['nombre'].tolist())
+                cantidad = c2.number_input("Cantidad", value=1.0)
+                precio = c3.number_input("Precio Unitario", value=0.0)
+                
+                confirmar = st.form_submit_button("Generar Enlace")
+                
+            if confirmar:
+                # Inyectamos el nombre del alumno en el link para trazabilidad
+                link = LINK_BASE.replace("NOMBRE", urllib.parse.quote(str(insumo)))
+                link = link.replace("111", str(cantidad)).replace("222", str(precio))
+                # Nota: Deberías tener un campo en tu Form para el Alumno
+                
+                st.markdown(f'''
+                    <a href="{link}" target="_blank">
+                        <button style="background-color:#D4AF37;color:black;padding:15px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;border:none;">
+                            🚀 VALIDAR CARGA (ALUMNO: {st.session_state.alumno})
+                        </button>
+                    </a>
+                ''', unsafe_allow_html=True)
+        except Exception as e:
+            st.error("Error al conectar con la base de datos.")
 
 # ... (Dashboard y otros módulos)
             # ... resto del formulario con st.form ...
