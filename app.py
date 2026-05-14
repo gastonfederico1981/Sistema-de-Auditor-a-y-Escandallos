@@ -2,17 +2,15 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 
-# 1. Configuración de página
 st.set_page_config(page_title="Carranza Control v1.0", layout="wide")
 
-# 2. Conexión con Caché (Crucial para evitar lentitud y errores de red)
-@st.cache_data(ttl=300) # Guarda los datos por 5 minutos
+# Caché para velocidad y evitar latencia
+@st.cache_data(ttl=300)
 def get_data(url):
     df = pd.read_csv(url)
     df.columns = df.columns.str.strip().str.lower()
     return df
 
-# Manejo de Secrets
 try:
     SHEET_URL = st.secrets["general"]["sheet_url"]
     LINK_PRE_RELLENADO = st.secrets["general"]["form_url"]
@@ -20,67 +18,42 @@ except:
     SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTtRbAmRk1QRuV5yF0aQn-V31F553pSGK5RDhQcYywYY6CN2wfuBZvg3g2hGeO9rMtG745FVavNnZZW/pub?output=csv"
     LINK_PRE_RELLENADO = "https://docs.google.com/forms/d/e/1FAIpQLSeBmsQmnlf5BzEUKDHtatfb9d7QjB2A2Cohvn4-oUPHMUk4Wg/viewform?usp=pp_url&entry.445714982=NOMBRE&entry.992341123=111&entry.1041327483=222"
 
-# 3. Estilo Visual
-st.markdown("""
-    <style>
-    .main { background-color: #0E1117; }
-    [data-testid="stMetric"] {
-        background-color: #1E2130; 
-        padding: 15px; 
-        border-radius: 10px; 
-        border: 1px solid #D4AF37;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# 4. Sidebar
-st.sidebar.title("💎 Carranza Control")
 menu = st.sidebar.radio("Navegación", ["Dashboard", "Inventario", "Escandallos", "Punto de Equilibrio"])
-
-# --- LÓGICA DE MÓDULOS ---
-
-if menu == "Dashboard":
-    st.title("📊 Tablero de Control Real")
-    try:
-        df = get_data(SHEET_URL)
-        df['stock_actual'] = pd.to_numeric(df['stock_actual'], errors='coerce').fillna(0)
-        df['costo_unitario'] = pd.to_numeric(df['costo_unitario'], errors='coerce').fillna(0)
-        df['stock_minimo'] = pd.to_numeric(df['stock_minimo'], errors='coerce').fillna(0)
-
-        valor_total = (df['stock_actual'] * df['costo_unitario']).sum()
-        alertas = len(df[df['stock_actual'] <= df['stock_minimo']])
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Capital Inmovilizado", f"$ {valor_total:,.2f}")
-        col2.metric("Insumos en Riesgo", alertas)
-        col3.metric("Estatus", "CONTROLADO" if alertas == 0 else "REVISAR STOCK")
-        st.dataframe(df, use_container_width=True)
-    except Exception as e:
-        st.error(f"Error técnico: {e}")
 
 if menu == "Inventario":
     st.title("📦 Carga de Insumos")
     
-    # Inicializamos el estado si no existe
-    if 'foto_capturada' not in st.session_state:
-        st.session_state.foto_capturada = None
+    # Manejo de estado: Separamos la cámara del formulario
+    if 'foto_lista' not in st.session_state:
+        st.session_state.foto_lista = None
 
-    # Solo mostramos la cámara si NO hay una foto guardada
-    if st.session_state.foto_capturada is None:
-        foto = st.camera_input("📷 Sacale una foto al remito")
-        if foto:
-            st.session_state.foto_capturada = foto
-            st.rerun() # Forzamos un reinicio limpio de la interfaz
-    
-    # Si ya tenemos la foto, mostramos el formulario de datos
+    if st.session_state.foto_lista is None:
+        archivo = st.camera_input("📷 Escaneá el remito")
+        if archivo:
+            st.session_state.foto_lista = archivo
+            st.rerun() # Reinicio limpio para evitar el error 'removeChild'
     else:
-        st.image(st.session_state.foto_capturada, caption="Remito capturado", width=300)
-        if st.button("🔄 Tomar otra foto"):
-            st.session_state.foto_capturada = None
+        st.image(st.session_state.foto_lista, width=400)
+        if st.button("🔄 Borrar y repetir"):
+            st.session_state.foto_lista = None
             st.rerun()
 
         try:
-            df_datos = get_data(SHEET_URL)
+            df = get_data(SHEET_URL)
+            with st.form("validador"):
+                st.subheader("Datos del Remito")
+                c1, c2, c3 = st.columns(3)
+                sel = c1.selectbox("Insumo", df['nombre'].tolist())
+                cant = c2.number_input("Cantidad", value=1.0)
+                prec = c3.number_input("Precio Unitario", value=0.0)
+                enviar = st.form_submit_button("Confirmar Carga")
+            
+            if enviar:
+                link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(sel)))
+                link = link.replace("111", str(cant)).replace("222", str(prec))
+                st.markdown(f'<a href="{link}" target="_blank"><button style="background-color:#D4AF37;color:black;padding:15px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;">🚀 VALIDAR EN DRIVE</button></a>', unsafe_allow_html=True)
+        except:
+            st.error("Error de conexión.")
             # ... resto del formulario con st.form ...
 
 # ... (Módulos de Escandallos y Punto de Equilibrio sin cambios mayores) ...
