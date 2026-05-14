@@ -4,11 +4,12 @@ import urllib.parse
 
 st.set_page_config(page_title="Carranza Control v1.0", layout="wide")
 
-# Caché agresivo para máxima velocidad
-@st.cache_data(ttl=3600, show_spinner="Sincronizando con Auditoría...") 
+# 1. Caché ultra-rápido para evitar esperas
+@st.cache_data(ttl=3600)
 def get_data(url):
-    # 'engine=c' acelera la lectura y 'low_memory=False' evita escaneos lentos
-    return pd.read_csv(url, engine='c', low_memory=False)
+    df = pd.read_csv(url, engine='c', low_memory=False)
+    df.columns = df.columns.str.strip().str.lower()
+    return df
 
 try:
     SHEET_URL = st.secrets["general"]["sheet_url"]
@@ -20,33 +21,37 @@ except:
 menu = st.sidebar.radio("Navegación", ["Dashboard", "Inventario", "Escandallos", "Punto de Equilibrio"])
 
 if menu == "Inventario":
-    st.title("📦 Carga de Insumos (Archivo/Foto)")
+    st.title("📦 Carga de Insumos")
     
-    # Reemplazo de cámara por cargador de archivos: mucho más estable
-    archivo = st.file_uploader("📁 Subir remito (Imagen o PDF)", type=["jpg", "png", "jpeg", "pdf"])
+    # 2. El truco del 'key' único evita que JS se confunda de nodo
+    archivo = st.file_uploader("📁 Subir remito", type=["jpg", "png", "jpeg"], key="uploader_auditoria")
 
     if archivo:
-        # Mostramos la imagen si es un formato compatible
-        if archivo.type != "application/pdf":
-            st.image(archivo, width=300)
-        
-        try:
-            df = get_data(SHEET_URL)
-            # El formulario evita que la app se recargue mientras escribís
-            with st.form("validador_archivo"):
-                st.subheader("Confirmación de Datos")
-                c1, c2, c3 = st.columns(3)
-                insumo_sel = c1.selectbox("Insumo", df['nombre'].tolist())
-                cantidad_sel = c2.number_input("Cantidad", value=1.0)
-                precio_sel = c3.number_input("Precio Unitario", value=0.0)
-                confirmar = st.form_submit_button("Generar Enlace")
-                
-            if confirmar:
-                link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
-                link = link.replace("111", str(cantidad_sel)).replace("222", str(precio_sel))
-                st.markdown(f'<a href="{link}" target="_blank"><button style="background-color:#D4AF37;color:black;padding:15px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;">🚀 VALIDAR EN DRIVE</button></a>', unsafe_allow_html=True)
-        except:
-            st.error("Error al conectar con la base de datos.")
+        # Usamos un contenedor vacío para estabilizar la carga visual
+        placeholder = st.empty()
+        with placeholder.container():
+            st.image(archivo, width=250)
+            
+            try:
+                df = get_data(SHEET_URL)
+                # El formulario 'congela' la UI para evitar el error de removeChild
+                with st.form("validador_estricto", clear_on_submit=True):
+                    st.subheader("Validación de Auditoría")
+                    c1, c2, c3 = st.columns(3)
+                    insumo_sel = c1.selectbox("Insumo", df['nombre'].tolist())
+                    cantidad_sel = c2.number_input("Cantidad", value=1.0, step=0.1)
+                    precio_sel = c3.number_input("Precio Unitario", value=0.0, step=0.1)
+                    confirmar = st.form_submit_button("Generar Enlace Final")
+                    
+                if confirmar:
+                    link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
+                    link = link.replace("111", str(cantidad_sel)).replace("222", str(precio_sel))
+                    st.success("✅ Datos listos para inyectar")
+                    st.markdown(f'<a href="{link}" target="_blank"><button style="background-color:#D4AF37;color:black;padding:15px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;">🚀 ENVIAR A GOOGLE DRIVE</button></a>', unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+# ... (Dashboard y otros módulos)
             # ... resto del formulario con st.form ...
 
 # ... (Módulos de Escandallos y Punto de Equilibrio sin cambios mayores) ...
