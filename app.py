@@ -4,11 +4,12 @@ import urllib.parse
 
 st.set_page_config(page_title="Carranza Control v1.0", layout="wide")
 
-# Caché para velocidad y evitar latencia
-@st.cache_data(ttl=3600, show_spinner="Cargando Auditoría...") 
+# Caché agresivo para máxima velocidad
+@st.cache_data(ttl=3600)
 def get_data(url):
-    # Usamos un motor de lectura más rápido (pyarrow si está disponible)
-    return pd.read_csv(url, engine='c')
+    df = pd.read_csv(url)
+    df.columns = df.columns.str.strip().str.lower()
+    return df
 
 try:
     SHEET_URL = st.secrets["general"]["sheet_url"]
@@ -20,39 +21,33 @@ except:
 menu = st.sidebar.radio("Navegación", ["Dashboard", "Inventario", "Escandallos", "Punto de Equilibrio"])
 
 if menu == "Inventario":
-    st.title("📦 Carga de Insumos")
+    st.title("📦 Carga de Insumos (Archivo/Foto)")
     
-    # Manejo de estado: Separamos la cámara del formulario
-    if 'foto_lista' not in st.session_state:
-        st.session_state.foto_lista = None
+    # Reemplazo de cámara por cargador de archivos: mucho más estable
+    archivo = st.file_uploader("📁 Subir remito (Imagen o PDF)", type=["jpg", "png", "jpeg", "pdf"])
 
-    if st.session_state.foto_lista is None:
-        archivo = st.camera_input("📷 Escaneá el remito")
-        if archivo:
-            st.session_state.foto_lista = archivo
-            st.rerun() # Reinicio limpio para evitar el error 'removeChild'
-    else:
-        st.image(st.session_state.foto_lista, width=400)
-        if st.button("🔄 Borrar y repetir"):
-            st.session_state.foto_lista = None
-            st.rerun()
-
+    if archivo:
+        # Mostramos la imagen si es un formato compatible
+        if archivo.type != "application/pdf":
+            st.image(archivo, width=300)
+        
         try:
             df = get_data(SHEET_URL)
-            with st.form("validador"):
-                st.subheader("Datos del Remito")
+            # El formulario evita que la app se recargue mientras escribís
+            with st.form("validador_archivo"):
+                st.subheader("Confirmación de Datos")
                 c1, c2, c3 = st.columns(3)
-                sel = c1.selectbox("Insumo", df['nombre'].tolist())
-                cant = c2.number_input("Cantidad", value=1.0)
-                prec = c3.number_input("Precio Unitario", value=0.0)
-                enviar = st.form_submit_button("Confirmar Carga")
-            
-            if enviar:
-                link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(sel)))
-                link = link.replace("111", str(cant)).replace("222", str(prec))
+                insumo_sel = c1.selectbox("Insumo", df['nombre'].tolist())
+                cantidad_sel = c2.number_input("Cantidad", value=1.0)
+                precio_sel = c3.number_input("Precio Unitario", value=0.0)
+                confirmar = st.form_submit_button("Generar Enlace")
+                
+            if confirmar:
+                link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
+                link = link.replace("111", str(cantidad_sel)).replace("222", str(precio_sel))
                 st.markdown(f'<a href="{link}" target="_blank"><button style="background-color:#D4AF37;color:black;padding:15px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;">🚀 VALIDAR EN DRIVE</button></a>', unsafe_allow_html=True)
         except:
-            st.error("Error de conexión.")
+            st.error("Error al conectar con la base de datos.")
             # ... resto del formulario con st.form ...
 
 # ... (Módulos de Escandallos y Punto de Equilibrio sin cambios mayores) ...
