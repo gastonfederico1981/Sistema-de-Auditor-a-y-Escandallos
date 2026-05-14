@@ -5,23 +5,22 @@ import urllib.parse
 # 1. Configuración de página
 st.set_page_config(page_title="Carranza Control v1.0", layout="wide")
 
-# 2. Conexión Segura con st.secrets
-# Si no existen los secrets (local), usa los links directos por ahora
+# 2. Conexión con Caché (Crucial para evitar lentitud y errores de red)
+@st.cache_data(ttl=300) # Guarda los datos por 5 minutos
+def get_data(url):
+    df = pd.read_csv(url)
+    df.columns = df.columns.str.strip().str.lower()
+    return df
+
+# Manejo de Secrets
 try:
     SHEET_URL = st.secrets["general"]["sheet_url"]
     LINK_PRE_RELLENADO = st.secrets["general"]["form_url"]
 except:
-    # Estos son tus links actuales como respaldo
     SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTtRbAmRk1QRuV5yF0aQn-V31F553pSGK5RDhQcYywYY6CN2wfuBZvg3g2hGeO9rMtG745FVavNnZZW/pub?output=csv"
     LINK_PRE_RELLENADO = "https://docs.google.com/forms/d/e/1FAIpQLSeBmsQmnlf5BzEUKDHtatfb9d7QjB2A2Cohvn4-oUPHMUk4Wg/viewform?usp=pp_url&entry.445714982=NOMBRE&entry.992341123=111&entry.1041327483=222"
 
-# Función optimizada para leer los datos
-def get_data():
-    df = pd.read_csv(SHEET_URL)
-    df.columns = df.columns.str.strip().str.lower()
-    return df
-
-# 3. Estilo Visual "Carranza Gold"
+# 3. Estilo Visual
 st.markdown("""
     <style>
     .main { background-color: #0E1117; }
@@ -31,24 +30,19 @@ st.markdown("""
         border-radius: 10px; 
         border: 1px solid #D4AF37;
     }
-    [data-testid="stDataFrame"] {
-        border: 1px solid #333;
-        border-radius: 10px;
-    }
     </style>
     """, unsafe_allow_html=True)
 
 # 4. Sidebar
 st.sidebar.title("💎 Carranza Control")
-st.sidebar.info("Software de Auditoría Forense")
 menu = st.sidebar.radio("Navegación", ["Dashboard", "Inventario", "Escandallos", "Punto de Equilibrio"])
 
-# 5. Lógica de Módulos
+# --- LÓGICA DE MÓDULOS ---
+
 if menu == "Dashboard":
     st.title("📊 Tablero de Control Real")
-    
     try:
-        df = get_data()
+        df = get_data(SHEET_URL)
         df['stock_actual'] = pd.to_numeric(df['stock_actual'], errors='coerce').fillna(0)
         df['costo_unitario'] = pd.to_numeric(df['costo_unitario'], errors='coerce').fillna(0)
         df['stock_minimo'] = pd.to_numeric(df['stock_minimo'], errors='coerce').fillna(0)
@@ -59,60 +53,40 @@ if menu == "Dashboard":
         col1, col2, col3 = st.columns(3)
         col1.metric("Capital Inmovilizado", f"$ {valor_total:,.2f}")
         col2.metric("Insumos en Riesgo", alertas)
-        col3.metric("Estatus del Negocio", "CONTROLADO" if alertas == 0 else "REVISAR STOCK")
-
-        st.subheader("📋 Auditoría de Insumos")
+        col3.metric("Estatus", "CONTROLADO" if alertas == 0 else "REVISAR STOCK")
         st.dataframe(df, use_container_width=True)
-
-        if alertas > 0:
-            st.warning(f"⚠️ Tenés {alertas} insumos por debajo del stock mínimo configurado.")
-
     except Exception as e:
-        st.error("No se pudo leer la planilla.")
-        st.write(f"Error técnico: {e}")
+        st.error(f"Error técnico: {e}")
 
 elif menu == "Inventario":
-    st.title("📦 Carga de Insumos por Escaneo")
+    st.title("📦 Carga de Insumos")
     
-    # Poné la cámara fuera de cualquier columna o contenedor complejo primero
-    foto = st.camera_input("📷 Sacale una foto al remito o factura")
+    # La cámara se mantiene estática para evitar el error de removeChild
+    foto = st.camera_input("📷 Sacale una foto al remito")
 
     if foto:
-        st.success("Imagen capturada.")
-        
-        # Recién acá cargamos los datos para evitar que el selector 
-        # aparezca y desaparezca rompiendo el nodo de JS
         try:
-            df_datos = get_data()
+            # Usamos el caché para que el selector sea instantáneo
+            df_datos = get_data(SHEET_URL)
             lista_insumos = df_datos['nombre'].tolist()
             
-            # Usá un contenedor fijo para los selectores
+            # El Formulario encapsula los cambios y evita que la página parpadee
             with st.form("confirmacion_datos"):
                 st.subheader("Confirmación de Datos")
                 c1, c2, c3 = st.columns(3)
                 insumo_sel = c1.selectbox("Insumo", lista_insumos)
                 cantidad_sel = c2.number_input("Cantidad", min_value=0.0, value=1.0)
                 precio_sel = c3.number_input("Precio Unitario", min_value=0.0, value=0.0)
-                
-                # Un botón de formulario ayuda a que Streamlit no intente 
-                # redibujar todo con cada tecla que tocás
                 confirmar = st.form_submit_button("Generar Enlace de Carga")
                 
             if confirmar:
-                import urllib.parse
-                link_dinamico = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
-                link_dinamico = link_dinamico.replace("111", str(cantidad_sel))
-                link_dinamico = link_dinamico.replace("222", str(precio_sel))
-                
-                st.markdown(f"""
-                    <a href="{link_dinamico}" target="_blank">
-                        <button style="background-color: #D4AF37; color: black; padding: 15px; border-radius: 10px; width: 100%; font-weight: bold;">
-                            🚀 VALIDAR E INYECTAR A DRIVE
-                        </button>
-                    </a>
-                """, unsafe_allow_html=True)
+                link = LINK_PRE_RELLENADO.replace("NOMBRE", urllib.parse.quote(str(insumo_sel)))
+                link = link.replace("111", str(cantidad_sel)).replace("222", str(precio_sel))
+                st.markdown(f'<a href="{link}" target="_blank"><button style="background-color: #D4AF37; color: black; padding: 15px; border-radius: 10px; width: 100%; font-weight: bold; cursor: pointer;">🚀 VALIDAR E INYECTAR A DRIVE</button></a>', unsafe_allow_html=True)
         except Exception as e:
             st.error("Error al cargar la lista de insumos.")
+
+# ... (Módulos de Escandallos y Punto de Equilibrio sin cambios mayores) ...
 
 elif menu == "Escandallos":
     st.title("🍳 Calculadora de Fichas Técnicas")
