@@ -2,17 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from datetime import datetime
-# =================================================================
-# 🛡️ INYECTOR DE SEGURIDAD ABSOLUTO PARA EVITAR EL REMOVECHILD
-# =================================================================
-# Esto evita que los componentes dinámicos se crucen en la memoria de React
-if 'ultimo_menu' not in st.session_state:
-    st.session_state.ultimo_menu = None
 
-# Forzamos una limpieza de fragmentos si el usuario cambia de pestaña
-menu_actual = st.sidebar.selectbox("📍 Menú de Navegación", ["Dashboard", "Recetas", "Carga Stock"]) if 'menu' not in locals() else None 
-
-# Si tu selectbox real está más abajo, no pasa nada, este bloque inicial protege el estado interno.
 # =================================================================
 # CONFIGURACIÓN DE PÁGINA (Debe ser SIEMPRE la primera línea)
 # =================================================================
@@ -234,11 +224,11 @@ if menu == "Dashboard":
     # =================================================================
     try:
         import os
-        ruta_local_creds = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0\credenciales.json" [cite: User Summary]
+        ruta_local_creds = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0\credenciales.json"
         
-        if os.path.exists(ruta_local_creds): [cite: User Summary]
+        if os.path.exists(ruta_local_creds):
             # Entorno Local
-            gc = gspread.service_account(filename=ruta_local_creds) [cite: User Summary]
+            gc = gspread.service_account(filename=ruta_local_creds)
             try:
                 url_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
                 sh = gc.open_by_url(url_alumnos)
