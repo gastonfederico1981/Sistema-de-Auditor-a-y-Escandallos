@@ -215,79 +215,99 @@ if menu == "Dashboard":
     # Recuperamos de forma segura la sesión del alumno activo al inicio
     alumno_actual = st.session_state.get('alumno', None)
     
+    df_principal = pd.DataFrame() # Inicializamos vacío para evitar NameError
+    
     try:
         # =================================================================
-        # LECTOR UNIVERSAL BASADO EN TU ESTRUCTURA TOML DEFINIDA
+        # LECTOR ROBUSTO MULTI-ENTORNO (EVITA COLAPSO DE RE-RENDER)
         # =================================================================
-        # Extraemos las credenciales comunes que se repiten en tu archivo
-        creds_base = dict(st.secrets["connections"]["gsheets_alumnos"])
+        import os
+        ruta_local_creds = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0\credenciales.json"
         
-        # Armamos el diccionario de autenticación limpio para Google
-        credentials_dict = {
-            "type": creds_base.get("type"),
-            "project_id": creds_base.get("project_id"),
-            "private_key_id": creds_base.get("private_key_id"),
-            "private_key": creds_base.get("private_key"),
-            "client_email": creds_base.get("client_email"),
-            "client_id": creds_base.get("client_id"),
-            "auth_uri": creds_base.get("auth_uri"),
-            "token_uri": creds_base.get("token_uri"),
-            "auth_provider_x509_cert_url": creds_base.get("auth_provider_x509_cert_url"),
-            "client_x509_cert_url": creds_base.get("client_x509_cert_url")
-        }
-        
-        # Nos autenticamos de forma nativa con Google
-        gc = gspread.service_account_from_dict(credentials_dict)
-        
-        # 🌟 LA CLAVE: Abrimos la planilla de ALUMNOS usando la URL específica de tu TOML
-        url_planilla_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
-        sh = gc.open_by_url(url_planilla_alumnos)
+        if os.path.exists(ruta_local_creds):
+            # Entorno Local
+            gc = gspread.service_account(filename=ruta_local_creds)
+            # Intentamos abrir por URL si está disponible localmente, sino por nombre
+            try:
+                url_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
+                sh = gc.open_by_url(url_alumnos)
+            except:
+                sh = gc.open("DB_CarranzaControl_Alumnos")
+        else:
+            # Entorno Servidor: Intentamos desarmar la estructura relacional TOML
+            try:
+                # Caso 1: Acceso estándar de Streamlit 1.28+ para st.secrets
+                if "connections" in st.secrets and "gsheets_alumnos" in st.secrets["connections"]:
+                    creds_base = dict(st.secrets["connections"]["gsheets_alumnos"])
+                    url_planilla_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
+                # Caso 2: Caída de emergencia si se aplanó la estructura en el panel
+                elif "gsheets_alumnos" in st.secrets:
+                    creds_base = dict(st.secrets["gsheets_alumnos"])
+                    url_planilla_alumnos = creds_base.get("spreadsheet")
+                else:
+                    raise KeyError("No se encontró la sección 'gsheets_alumnos' en los secretos.")
+
+                # Construcción limpia del diccionario de cuenta de servicio
+                credentials_dict = {
+                    "type": creds_base.get("type", "service_account"),
+                    "project_id": creds_base.get("project_id"),
+                    "private_key_id": creds_base.get("private_key_id"),
+                    "private_key": creds_base.get("private_key").replace("\\n", "\n") if creds_base.get("private_key") else None,
+                    "client_email": creds_base.get("client_email"),
+                    "client_id": creds_base.get("client_id"),
+                    "auth_uri": creds_base.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+                    "token_uri": creds_base.get("token_uri", "https://oauth2.googleapis.com/token"),
+                    "auth_provider_x509_cert_url": creds_base.get("auth_provider_x509_cert_url"),
+                    "client_x509_cert_url": creds_base.get("client_x509_cert_url")
+                }
+                
+                gc = gspread.service_account_from_dict(credentials_dict)
+                sh = gc.open_by_url(url_planilla_alumnos)
+                
+            except Exception as e_inner:
+                st.error(f"⚠️ Error al procesar st.secrets en la nube: {e_inner}")
+                raise e_inner
+
+        # =================================================================
+        # EXTRACCIÓN DE DATOS SEGURA
+        # =================================================================
         worksheet = sh.get_worksheet(0) 
-        
         todos_los_datos = worksheet.get_all_records()
-        df_principal = pd.DataFrame(todos_los_datos)
+        if todos_los_datos:
+            df_principal = pd.DataFrame(todos_los_datos)
 
     except Exception as e:
-        st.error(f"❌ Error de credenciales o conexión en el sistema relacional: {e}")
+        # Mostramos el error en pantalla de forma controlada sin romper el árbol de nodos
+        st.error(f"❌ Error crítico de conexión: {e}")
         df_principal = pd.DataFrame()
 
     # =================================================================
     # 🌟 FILTRO DE PRIVACIDAD: SEGMENTACIÓN POR ALUMNO
     # =================================================================
-    if not df_principal.empty:
-        # Buscamos de forma flexible si existe la columna de identidad (Usuario o Alumno)
+    # Forzamos que si df_principal está vacío, el flujo continúe pacíficamente hacia el st.warning
+    if df_principal is not None and not df_principal.empty:
         col_usuario = [c for c in df_principal.columns if 'usuario' in c.lower() or 'alumno' in c.lower()]
         
         if alumno_actual and col_usuario:
-            # Si hay un alumno logueado, filtramos estrictamente sus filas
             df_dashboard = df_principal[df_principal[col_usuario[0]].astype(str).str.lower() == str(alumno_actual).lower()].copy()
             texto_contexto = f" (Filtro activo: {alumno_actual})"
         else:
-            # Si sos vos (Admin) o no hay sesión, se muestra el total global
             df_dashboard = df_principal.copy()
             texto_contexto = " (Consolidado General)"
 
-        # =================================================================
-        # Procesamiento de Datos (Sobre el DataFrame filtrado seguro)
-        # =================================================================
         if not df_dashboard.empty:
-            # 1. Identificación de columnas clave
             col_p = [c for c in df_dashboard.columns if 'precio' in c or 'costo' in c][0]
             col_q = [c for c in df_dashboard.columns if 'cantidad' in c or 'stock' in c][0]
             col_fecha = [c for c in df_dashboard.columns if 'fecha' in c]
 
-            # 2. Cálculo del valor total por fila
             df_dashboard['valor_total'] = df_dashboard[col_p] * df_dashboard[col_q]
             
-            # Ordenamiento por Fecha (si existe la columna)
             if col_fecha:
                 df_dashboard[col_fecha[0]] = pd.to_datetime(df_dashboard[col_fecha[0]], errors='coerce')
                 df_dashboard = df_dashboard.sort_values(by=col_fecha[0], ascending=False)
             
-            # Sumatoria Total Personalizada
             total_inventario = df_dashboard['valor_total'].sum()
             
-            # 3. Visualización de Métricas (Dinámicas según quien mire)
             st.caption(f"📌 Vista actual: {texto_contexto}")
             c1, c2, c3 = st.columns(3)
             c1.metric("Insumos Activos", len(df_dashboard), key=f"met_ins_act_{alumno_actual}")
@@ -296,20 +316,18 @@ if menu == "Dashboard":
             
             st.divider()
 
-            # 4. Planilla de Existencias Privada
             with st.expander("👁️ Ver detalle de existencias (Ordenado por Fecha)"):
+                # Mantenemos la key única dinámica para blindar el componente dataframe
                 st.dataframe(
                     df_dashboard, 
                     use_container_width=True, 
                     hide_index=True,
-                    key=f"df_dash_view_{alumno_actual}"
+                    key=f"df_dash_view_secure_{alumno_actual}"
                 )
-                
         else:
-            st.info(f"💡 Hola {alumno_actual}, actualmente no tenés insumos registrados en tu inventario.")
-            
+            st.info(f"💡 Hola {alumno_actual}, actualmente no tenés insumos registrados.")
     else:
-        st.warning("⚠️ No se encontraron datos para procesar el Dashboard.")
+        st.warning("⚠️ No se pudieron cargar datos desde la base de datos central. Revisá la pestaña de secretos en el servidor.")
 
 elif menu == "Inventario":
     st.title("📦 Carga de Insumos")
