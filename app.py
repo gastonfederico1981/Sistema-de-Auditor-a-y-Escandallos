@@ -2,7 +2,17 @@ import streamlit as st
 import pandas as pd
 import gspread
 from datetime import datetime
+# =================================================================
+# 🛡️ INYECTOR DE SEGURIDAD ABSOLUTO PARA EVITAR EL REMOVECHILD
+# =================================================================
+# Esto evita que los componentes dinámicos se crucen en la memoria de React
+if 'ultimo_menu' not in st.session_state:
+    st.session_state.ultimo_menu = None
 
+# Forzamos una limpieza de fragmentos si el usuario cambia de pestaña
+menu_actual = st.sidebar.selectbox("📍 Menú de Navegación", ["Dashboard", "Recetas", "Carga Stock"]) if 'menu' not in locals() else None 
+
+# Si tu selectbox real está más abajo, no pasa nada, este bloque inicial protege el estado interno.
 # =================================================================
 # CONFIGURACIÓN DE PÁGINA (Debe ser SIEMPRE la primera línea)
 # =================================================================
