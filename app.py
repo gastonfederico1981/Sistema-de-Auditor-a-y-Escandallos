@@ -341,7 +341,7 @@ elif menu == "Inventario":
                 link = LINK_BASE.replace("NOMBRE", urllib.parse.quote(str(insumo)))
                 link = link.replace("111", str(cantidad)).replace("222", str(precio))
                 st.markdown(f'''
-                    <a href="{link}" target="_blank">
+                    st.link_button("🚀 VALIDAR EN GOOGLE DRIVE", url=link, use_container_width=True)
                         <button style="background-color:#D4AF37;color:black;padding:18px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;border:none;font-size:16px;">
                             🚀 VALIDAR EN GOOGLE DRIVE
                         </button>
