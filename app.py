@@ -212,27 +212,43 @@ if st.session_state.alumno == "Gaston Carranza": # Acceso exclusivo para vos
 if menu == "Dashboard":
     st.title("📊 Dashboard de Gestión")
     
-    # =================================================================
-    # CONEXIÓN SEGURA A LA BASE DE DATOS DE STOCK / ALUMNOS
-    # =================================================================
+    # Recuperamos de forma segura la sesión del alumno activo al inicio
     alumno_actual = st.session_state.get('alumno', None)
-
+    
     try:
-        # 1. Autenticación con Google Sheets usando tus credenciales
-        gc = gspread.service_account_from_dict(CREDENTIALS)
+        # =================================================================
+        # LECTOR UNIVERSAL BASADO EN TU ESTRUCTURA TOML DEFINIDA
+        # =================================================================
+        # Extraemos las credenciales comunes que se repiten en tu archivo
+        creds_base = dict(st.secrets["connections"]["gsheets_alumnos"])
         
-        # 2. Abrimos el libro maestro de Alumnos
-        sh = gc.open("DB_CarranzaControl_Alumnos")
+        # Armamos el diccionario de autenticación limpio para Google
+        credentials_dict = {
+            "type": creds_base.get("type"),
+            "project_id": creds_base.get("project_id"),
+            "private_key_id": creds_base.get("private_key_id"),
+            "private_key": creds_base.get("private_key"),
+            "client_email": creds_base.get("client_email"),
+            "client_id": creds_base.get("client_id"),
+            "auth_uri": creds_base.get("auth_uri"),
+            "token_uri": creds_base.get("token_uri"),
+            "auth_provider_x509_cert_url": creds_base.get("auth_provider_x509_cert_url"),
+            "client_x509_cert_url": creds_base.get("client_x509_cert_url")
+        }
         
-        # 3. Conexión a la primera pestaña
+        # Nos autenticamos de forma nativa con Google
+        gc = gspread.service_account_from_dict(credentials_dict)
+        
+        # 🌟 LA CLAVE: Abrimos la planilla de ALUMNOS usando la URL específica de tu TOML
+        url_planilla_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
+        sh = gc.open_by_url(url_planilla_alumnos)
         worksheet = sh.get_worksheet(0) 
         
-        # 4. Traemos los datos de forma segura
         todos_los_datos = worksheet.get_all_records()
         df_principal = pd.DataFrame(todos_los_datos)
 
     except Exception as e:
-        st.error(f"❌ Error crítico de conexión a la base de datos: {e}")
+        st.error(f"❌ Error de credenciales o conexión en el sistema relacional: {e}")
         df_principal = pd.DataFrame()
 
     # =================================================================
@@ -280,7 +296,7 @@ if menu == "Dashboard":
             
             st.divider()
 
-            # 4. Planilla de Existencias Privada (Ahora correctamente indentada dentro del IF)
+            # 4. Planilla de Existencias Privada
             with st.expander("👁️ Ver detalle de existencias (Ordenado por Fecha)"):
                 st.dataframe(
                     df_dashboard, 
