@@ -212,38 +212,33 @@ if st.session_state.alumno == "Gaston Carranza": # Acceso exclusivo para vos
 if menu == "Dashboard":
     st.title("📊 Dashboard de Gestión")
     
-    # 1. Recuperamos de forma segura la sesión del alumno activo al inicio
+    # 1. Recuperamos la sesión del alumno activo de forma segura
     alumno_actual = st.session_state.get('alumno', None)
     
-    # Inicializamos las variables de control arriba para evitar fallos de renderizado
+    # Inicialización limpia de variables de control
     df_principal = pd.DataFrame()
     error_conexion = None
 
     # =================================================================
-    # EXCLUSIVO: CONEXIÓN EN CAPSULADA (No dibuja nada en pantalla)
+    # CONEXIÓN ENCAPSULADA (Sin elementos visuales que rompan el DOM)
     # =================================================================
     try:
         import os
-        ruta_local_creds = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0\credenciales.json"
+        ruta_local_creds = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0\credenciales.json" [cite: User Summary]
         
-        if os.path.exists(ruta_local_creds):
-            # Entorno Local
-            gc = gspread.service_account(filename=ruta_local_creds)
+        if os.path.exists(ruta_local_creds): [cite: User Summary]
+            gc = gspread.service_account(filename=ruta_local_creds) [cite: User Summary]
             try:
                 url_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
                 sh = gc.open_by_url(url_alumnos)
             except:
                 sh = gc.open("DB_CarranzaControl_Alumnos")
         else:
-            # Entorno Servidor
             if "connections" in st.secrets and "gsheets_alumnos" in st.secrets["connections"]:
                 creds_base = dict(st.secrets["connections"]["gsheets_alumnos"])
                 url_planilla_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
-            elif "gsheets_alumnos" in st.secrets:
-                creds_base = dict(st.secrets["gsheets_alumnos"])
-                url_planilla_alumnos = creds_base.get("spreadsheet")
             else:
-                raise KeyError("No se encontró la sección 'gsheets_alumnos' en los secretos.")
+                raise KeyError("Faltan las credenciales relacionales en la nube.")
 
             credentials_dict = {
                 "type": creds_base.get("type", "service_account"),
@@ -251,13 +246,8 @@ if menu == "Dashboard":
                 "private_key_id": creds_base.get("private_key_id"),
                 "private_key": creds_base.get("private_key").replace("\\n", "\n") if creds_base.get("private_key") else None,
                 "client_email": creds_base.get("client_email"),
-                "client_id": creds_base.get("client_id"),
-                "auth_uri": creds_base.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
-                "token_uri": creds_base.get("token_uri", "https://oauth2.googleapis.com/token"),
-                "auth_provider_x509_cert_url": creds_base.get("auth_provider_x509_cert_url"),
-                "client_x509_cert_url": creds_base.get("client_x509_cert_url")
+                "client_id": creds_base.get("client_id")
             }
-            
             gc = gspread.service_account_from_dict(credentials_dict)
             sh = gc.open_by_url(url_planilla_alumnos)
 
@@ -267,20 +257,21 @@ if menu == "Dashboard":
             df_principal = pd.DataFrame(todos_los_datos)
 
     except Exception as e:
-        # Guardamos el error en una variable en lugar de tirarlo directo a la interfaz
         error_conexion = str(e)
 
     # =================================================================
-    # RENDERIZADO VISUAL CONTROLADO (Afuera del bloque de conexión)
+    # INTERFAZ DE USUARIO SANITIZADA (Normas anti-removeChild)
     # =================================================================
     if error_conexion:
-        st.error(f"❌ Error crítico de conexión: {error_conexion}")
-        st.warning("⚠️ Comprobá la configuración de credenciales en tu panel del servidor.")
-    
+        st.error(f"❌ Error de Conexión: {error_conexion}")
+        
     elif not df_principal.empty:
         # Buscamos la columna de identidad de forma flexible
         col_usuario = [c for c in df_principal.columns if 'usuario' in c.lower() or 'alumno' in c.lower()]
         
+        # Sanitizamos el nombre del alumno para usarlo de forma segura en las KEYS de React
+        alumno_safe = str(alumno_actual).lower().replace(' ', '_') if alumno_actual else "admin"
+
         if alumno_actual and col_usuario:
             df_dashboard = df_principal[df_principal[col_usuario[0]].astype(str).str.lower() == str(alumno_actual).lower()].copy()
             texto_contexto = f" (Filtro activo: {alumno_actual})"
@@ -288,12 +279,13 @@ if menu == "Dashboard":
             df_dashboard = df_principal.copy()
             texto_contexto = " (Consolidado General)"
 
+        st.caption(f"📌 Vista actual: {texto_contexto}")
+        
         if not df_dashboard.empty:
-            # Identificación estricta de columnas para evitar index errors
-            columnas = df_dashboard.columns
-            col_p = [c for c in columnas if 'precio' in c or 'costo' in c][0]
-            col_q = [c for c in columnas if 'cantidad' in c or 'stock' in c][0]
-            col_fecha = [c for c in columnas if 'fecha' in c]
+            # Identificación de columnas clave
+            col_p = [c for c in df_dashboard.columns if 'precio' in c or 'costo' in c][0]
+            col_q = [c for c in df_dashboard.columns if 'cantidad' in c or 'stock' in c][0]
+            col_fecha = [c for c in df_dashboard.columns if 'fecha' in c]
 
             df_dashboard['valor_total'] = df_dashboard[col_p] * df_dashboard[col_q]
             
@@ -303,25 +295,35 @@ if menu == "Dashboard":
             
             total_inventario = df_dashboard['valor_total'].sum()
             
-            # Dibujamos los contenedores visuales de forma estática
-            st.caption(f"📌 Vista actual: {texto_contexto}")
+            # MÓDULO 1: Métricas con Keys estables y normalizadas (sin espacios)
             c1, c2, c3 = st.columns(3)
-            c1.metric("Insumos Activos", len(df_dashboard))
-            c2.metric("VALOR TOTAL STOCK", f"$ {total_inventario:,.2f}")
-            c3.metric("Estado", "Auditoría Ok" if alumno_actual else "Modo Admin")
+            c1.metric("Insumos Activos", len(df_dashboard), key=f"met_ins_act_{alumno_safe}")
+            c2.metric("VALOR TOTAL STOCK", f"$ {total_inventario:,.2f}", key=f"met_val_tot_{alumno_safe}")
+            c3.metric("Estado", "Auditoría Ok" if alumno_actual else "Modo Admin", key=f"met_est_{alumno_safe}")
             
             st.divider()
 
+            # MÓDULO 2: Acciones seguidas de links nativos (Cero HTML interactivo peligroso)
+            st.write("📂 **Acciones del Sistema:**")
+            
+            # Usamos st.link_button que es el componente nativo oficial y seguro para redirecciones
+            link_drive = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
+            st.link_button("🚀 VALIDAR EN GOOGLE DRIVE", url=link_drive, use_container_width=True)
+            
+            st.divider()
+
+            # MÓDULO 3: Planilla de Datos con Key Sanitizada
             with st.expander("👁️ Ver detalle de existencias (Ordenado por Fecha)"):
                 st.dataframe(
                     df_dashboard, 
                     use_container_width=True, 
-                    hide_index=True
+                    hide_index=True,
+                    key=f"df_dash_view_{alumno_safe}"
                 )
         else:
-            st.info(f"💡 Hola {alumno_actual}, actualmente no tenés insumos registrados.")
+            st.info(f"💡 Hola {alumno_actual}, actualmente no tenés insumos registrados en tu inventario.")
     else:
-        st.warning("⚠️ No se encontraron registros disponibles para mostrar en la base de datos.")
+        st.warning("⚠️ No se encontraron registros para procesar el Dashboard.")
 
 elif menu == "Inventario":
     st.title("📦 Carga de Insumos")
