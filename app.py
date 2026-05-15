@@ -212,60 +212,47 @@ if st.session_state.alumno == "Gaston Carranza": # Acceso exclusivo para vos
 if menu == "Dashboard":
     st.title("📊 Dashboard de Gestión")
     
-    if not df_principal.empty:
-        # =================================================================
-        # 🌟 FILTRO DE PRIVACIDAD: SEGMENTACIÓN POR ALUMNO
-        # =================================================================
-        # Traemos de forma segura el alumno que está navegando la app
-        # =================================================================
-        # CONEXIÓN SEGURA A LA BASE DE DATOS DE STOCK / ALUMNOS
-        # =================================================================
-        alumno_actual = st.session_state.get('alumno', None)
+    # =================================================================
+    # CONEXIÓN SEGURA A LA BASE DE DATOS DE STOCK / ALUMNOS
+    # =================================================================
+    alumno_actual = st.session_state.get('alumno', None)
 
-        try:
-            # 1. Autenticación con Google Sheets usando tus credenciales
-            gc = gspread.service_account_from_dict(CREDENTIALS)
-            
-            # 2. Abrimos el libro maestro de Alumnos
-            sh = gc.open("DB_CarranzaControl_Alumnos")
-            
-            # 3. DEFINICIÓN DE LA VARIABLE (Acá se crea 'worksheet' para evitar el NameError)
-            worksheet = sh.get_worksheet(0) 
-            
-            # 4. Ahora que existe 'worksheet', traemos los datos de forma segura
-            todos_los_datos = worksheet.get_all_records()
-            df_principal = pd.DataFrame(todos_los_datos)
-
-        except Exception as e:
-            st.error(f"❌ Error crítico de conexión a la base de datos: {e}")
-            # Creamos un DataFrame vacío de respaldo para que la app no se destruya si falla internet
-            df_principal = pd.DataFrame()
-
-
-        # =================================================================
-        # 🌟 APLICAMOS EL FILTRO PARA QUE NO SE MEZCLEN LOS DATOS
-        # =================================================================
-        # Si no está vacío y hay un alumno navegando, recortamos el DataFrame global
-        if not df_principal.empty and alumno_actual:
-            # Buscamos de forma flexible la columna de identidad (Usuario o Alumno)
-            col_usuario = [c for c in df_principal.columns if 'usuario' in c.lower() or 'alumno' in c.lower()]
-            
-            if col_usuario:
-                # Dejamos únicamente las filas que le pertenecen al alumno logueado
-                df_principal = df_principal[df_principal[col_usuario[0]].astype(str).str.lower() == str(alumno_actual).lower()].copy()
+    try:
+        # 1. Autenticación con Google Sheets usando tus credenciales
+        gc = gspread.service_account_from_dict(CREDENTIALS)
         
-        # Creamos una copia filtrada para trabajar las métricas de la pantalla actual
+        # 2. Abrimos el libro maestro de Alumnos
+        sh = gc.open("DB_CarranzaControl_Alumnos")
+        
+        # 3. Conexión a la primera pestaña
+        worksheet = sh.get_worksheet(0) 
+        
+        # 4. Traemos los datos de forma segura
+        todos_los_datos = worksheet.get_all_records()
+        df_principal = pd.DataFrame(todos_los_datos)
+
+    except Exception as e:
+        st.error(f"❌ Error crítico de conexión a la base de datos: {e}")
+        df_principal = pd.DataFrame()
+
+    # =================================================================
+    # 🌟 FILTRO DE PRIVACIDAD: SEGMENTACIÓN POR ALUMNO
+    # =================================================================
+    if not df_principal.empty:
+        # Buscamos de forma flexible si existe la columna de identidad (Usuario o Alumno)
+        col_usuario = [c for c in df_principal.columns if 'usuario' in c.lower() or 'alumno' in c.lower()]
+        
         if alumno_actual and col_usuario:
             # Si hay un alumno logueado, filtramos estrictamente sus filas
             df_dashboard = df_principal[df_principal[col_usuario[0]].astype(str).str.lower() == str(alumno_actual).lower()].copy()
             texto_contexto = f" (Filtro activo: {alumno_actual})"
         else:
-            # Si sos vos (Admin) o no hay sesión, se muestra el total global de la fábrica/escuela
+            # Si sos vos (Admin) o no hay sesión, se muestra el total global
             df_dashboard = df_principal.copy()
             texto_contexto = " (Consolidado General)"
 
         # =================================================================
-        # Procesamiento de Datos (Ahora sobre el DataFrame filtrado seguro)
+        # Procesamiento de Datos (Sobre el DataFrame filtrado seguro)
         # =================================================================
         if not df_dashboard.empty:
             # 1. Identificación de columnas clave
@@ -287,15 +274,20 @@ if menu == "Dashboard":
             # 3. Visualización de Métricas (Dinámicas según quien mire)
             st.caption(f"📌 Vista actual: {texto_contexto}")
             c1, c2, c3 = st.columns(3)
-            c1.metric("Insumos Activos", len(df_dashboard))
-            c2.metric("VALOR TOTAL STOCK", f"$ {total_inventario:,.2f}")
-            c3.metric("Estado", "Auditoría Ok" if alumno_actual else "Modo Admin")
+            c1.metric("Insumos Activos", len(df_dashboard), key=f"met_ins_act_{alumno_actual}")
+            c2.metric("VALOR TOTAL STOCK", f"$ {total_inventario:,.2f}", key=f"met_val_tot_{alumno_actual}")
+            c3.metric("Estado", "Auditoría Ok" if alumno_actual else "Modo Admin", key=f"met_est_{alumno_actual}")
             
             st.divider()
 
-            # 4. Planilla de Existencias Privada
+            # 4. Planilla de Existencias Privada (Ahora correctamente indentada dentro del IF)
             with st.expander("👁️ Ver detalle de existencias (Ordenado por Fecha)"):
-                st.dataframe(df_dashboard, use_container_width=True, hide_index=True)
+                st.dataframe(
+                    df_dashboard, 
+                    use_container_width=True, 
+                    hide_index=True,
+                    key=f"df_dash_view_{alumno_actual}"
+                )
                 
         else:
             st.info(f"💡 Hola {alumno_actual}, actualmente no tenés insumos registrados en tu inventario.")
@@ -447,14 +439,19 @@ Generado automáticamente por Carranza Control v1.1
                 st.markdown("---")
                 st.subheader(f"📋 Tu Histórico de Auditorías ({alumno_actual})")
                 
-                with st.spinner("Cargando tus registros personales..."):
-                    df_alumno = leer_historico_filtrado(alumno_actual)
-                    
+                placeholder_historial = st.empty()
+
+                with placeholder_historial.container():
+                    with st.spinner("Cargando tus registros personales..."):
+                        df_alumno = leer_historico_filtrado(alumno_actual)
+
+                # Ahora renderizamos la tabla por fuera del bloque del spinner
                 if not df_alumno.empty:
                     st.dataframe(
                         df_alumno, 
                         use_container_width=True,
-                        hide_index=True
+                        hide_index=True,
+                        key=f"df_recetas_hist_{alumno_actual}" # 👈 Clave única para evitar el cruce
                     )
                     csv = df_alumno.to_csv(index=False).encode('utf-8')
                     st.download_button(
