@@ -388,23 +388,21 @@ elif menu == "Inventario":
         # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
         # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
         # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
+        # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
         try:
             if archivo.name.endswith('.csv'):
-                df_remito = pd.read_csv(archivo)
+                # 🛡️ Agregamos encoding='latin1' para que digiera eñes, acentos y eñes de Windows
+                df_remito = pd.read_csv(archivo, encoding='latin1')
             else:
                 df_remito = pd.read_excel(archivo)
             
-            # 🛡️ LIMPIEZA ANTI-NAN: Reemplazamos celdas vacías para evitar el error de JSON Compliance
+            # Limpieza anti-NaN nativa de Pandas (sin usar np)
             df_remito = df_remito.fillna({
-                'Cantidad': 1.0,
-                'cantidad': 1.0,
-                'Precio': 0.0,
-                'precio': 0.0,
-                'Insumo': 'Insumo Genérico',
-                'nombre': 'Insumo Genérico'
+                'Cantidad': 1.0, 'cantidad': 1.0,
+                'Precio': 0.0, 'precio': 0.0,
+                'Insumo': 'Insumo Genérico', 'nombre': 'Insumo Genérico'
             })
-            # Para cualquier otra columna que ande dando vueltas vacía (como observaciones), le ponemos texto vacío
-            df_remito = df_remito.where(pd.notnull(df_remito), None) 
+            df_remito = df_remito.where(pd.notnull(df_remito), None)
             
             st.write("👀 **Verificación previa de las filas detectadas (Limpio):**")
             st.dataframe(df_remito.head(5), use_container_width=True, hide_index=True)
