@@ -387,6 +387,7 @@ elif menu == "Inventario":
     if archivo:
         # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
         # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
+        # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
         try:
             if archivo.name.endswith('.csv'):
                 df_remito = pd.read_csv(archivo)
