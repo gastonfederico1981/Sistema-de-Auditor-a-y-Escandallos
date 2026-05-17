@@ -448,18 +448,25 @@ elif menu == "Inventario":
                             filas_a_insertar.append(registro)
                         
                         # 3. ESCRITURA DIRECTA EN EL SPREADSHEET DE GOOGLE
+                        # 3. ESCRITURA DIRECTA EN EL SPREADSHEET DE GOOGLE
                         if filas_a_insertar:
-                            # sh es tu variable de conexión que ya declaramos arriba en la app
-                            worksheet_historico = sh.get_worksheet(0) 
-                            worksheet_historico.append_rows(filas_a_insertar, value_input_option='USER_ENTERED')
-                            
-                            st.success(f"🔥 ¡Éxito! Se procesaron y grabaron {len(filas_a_insertar)} productos directamente en el Drive.")
-                            st.balloons()
+                            try:
+                                # Seleccionamos la primera pestaña de la hoja
+                                worksheet_historico = sh.get_worksheet(0) 
+                                
+                                # 🛡️ USAMOS EL FORMATO DIRECTO POR COORDENADAS PARA EVITAR VALIDADORES DE ENCABEZADOS DUPLICADOS
+                                worksheet_historico.append_rows(
+                                    filas_a_insertar, 
+                                    value_input_option='USER_ENTERED',
+                                    insert_data_option='INSERT_ROWS' # Fuerza a meter filas abajo de todo
+                                )
+                                
+                                st.success(f"🔥 ¡Éxito! Se procesaron y grabaron {len(filas_a_insertar)} productos directamente en el Drive.")
+                                st.balloons()
+                            except Exception as err_api:
+                                st.error(f"⚠️ Error de escritura en la API de Google: {str(err_api)}")
                         else:
                             st.warning("⚠️ No se encontraron filas válidas para cargar.")
-                        
-        except Exception as e:
-            st.error(f"⚠️ Error al procesar o escribir en Drive: {str(e)}")
 
 elif menu == "Escandallos":
     st.title("🍳 Calculadora de Fichas Técnicas")
