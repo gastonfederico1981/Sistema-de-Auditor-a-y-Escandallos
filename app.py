@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import gspread
 from datetime import datetime
+import os
+import urllib.parse
+
 
 # =================================================================
 # CONFIGURACIÓN DE PÁGINA (Debe ser SIEMPRE la primera línea)
@@ -222,55 +225,97 @@ if menu == "Dashboard":
     # =================================================================
     # CONEXIÓN ENCAPSULADA (Sin elementos visuales que rompan el DOM)
     # =================================================================
-    try:
+# =================================================================
+# CARGA DE DATOS (Apertura y Cierre rápido del bloque Try)
+# =================================================================
+# =================================================================
+# CARGA DE DATOS CON DIAGNÓSTICO DE RUTA ACTIVO
+# =================================================================
+df_principal = pd.DataFrame()
+error_conexion = None
+
+try:
+    # Nivel 1 (4 espacios): Dentro del try principal
+    ruta_local_creds = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0\credenciales_oficiales.json"
         
-        ruta_local_creds = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0\credenciales.json" [cite: User Summary]
+    # 1. FORZAMOS DETECCIÓN EN TU MÁQUINA LOCAL
+    if os.name == 'nt':  # Si estás en Windows
         
-       if os.path.exists(ruta_local_creds): #
-            # Control de Producción 2026 - Bypass local activo
-            gc = gspread.service_account(filename=ruta_local_creds)
-            try:
-                url_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
-                sh = gc.open_by_url(url_alumnos)
-            except:
-                sh = gc.open("DB_CarranzaControl_Alumnos")
-        else:
-            if "connections" in st.secrets and "gsheets_alumnos" in st.secrets["connections"]:
-                creds_base = dict(st.secrets["connections"]["gsheets_alumnos"])
-                url_planilla_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
+        # Si la ruta exacta falla, investigamos qué está pasando en esa carpeta
+        if not os.path.exists(ruta_local_creds):
+            carpeta_padre = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0"
+            if os.path.exists(carpeta_padre):
+                archivos_encontrados = os.listdir(carpeta_padre)
+                raise FileNotFoundError(
+                    f"⚠️ El archivo 'credenciales.json' NO está en la ruta especificada.\n"
+                    f"Archivos reales que detecto dentro de esa carpeta: {archivos_encontrados}\n"
+                    f"Asegurate de que el nombre sea exactamente 'credenciales.json' y no 'credenciales.json.json'."
+                )
             else:
-                raise KeyError("Faltan las credenciales relacionales en la nube.")
-
-            credentials_dict = {
-                "type": creds_base.get("type", "service_account"),
-                "project_id": creds_base.get("project_id"),
-                "private_key_id": creds_base.get("private_key_id"),
-                "private_key": creds_base.get("private_key").replace("\\n", "\n") if creds_base.get("private_key") else None,
-                "client_email": creds_base.get("client_email"),
-                "client_id": creds_base.get("client_id")
-            }
-            gc = gspread.service_account_from_dict(credentials_dict)
-            sh = gc.open_by_url(url_planilla_alumnos)
-
-        worksheet = sh.get_worksheet(0) 
-        todos_los_datos = worksheet.get_all_records()
-        if todos_los_datos:
-            df_principal = pd.DataFrame(todos_los_datos)
-
-    except Exception as e:
-        error_conexion = str(e)
-
-    # =================================================================
-    # INTERFAZ DE USUARIO SANITIZADA (Normas anti-removeChild)
-    # =================================================================
-    if error_conexion:
-        st.error(f"❌ Error de Conexión: {error_conexion}")
+                escritorio_base = r"C:\Users\gaston carranza\OneDrive"
+                carpetas_onedrive = os.listdir(escritorio_base) if os.path.exists(escritorio_base) else "No encontré raíz de OneDrive"
+                raise FileNotFoundError(
+                    f"⚠️ No detecto la carpeta del proyecto en el Escritorio.\n"
+                    f"Estructura de tu OneDrive: {carpetas_onedrive}\n"
+                    f"Verificá si tu ruta del escritorio no se llama 'OneDrive - Personal' o algo similar."
+                )
         
-    elif not df_principal.empty:
-        # Buscamos la columna de identidad de forma flexible
+        # Conexión local limpia mediante archivo binario
+        gc = gspread.service_account(filename=ruta_local_creds)
+        
+        try:
+            url_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
+            sh = gc.open_by_url(url_alumnos)
+        except:
+            sh = gc.open("DB_CarranzaControl_Alumnos")
+                
+    # 2. ENTORNO NUBE (Solo corre si el servidor no es Windows / Streamlit Cloud)
+    else:
+        if "connections" in st.secrets and "gsheets_alumnos" in st.secrets["connections"]:
+            creds_base = dict(st.secrets["connections"]["gsheets_alumnos"])
+            url_planilla_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
+        else:
+            raise KeyError("Faltan las credenciales relacionales en la nube.")
+
+        credentials_dict = {
+            "type": creds_base.get("type", "service_account"),
+            "project_id": creds_base.get("project_id"),
+            "private_key_id": creds_base.get("private_key_id"),
+            "private_key": creds_base.get("private_key").replace("\\n", "\n") if creds_base.get("private_key") else None,
+            "client_email": creds_base.get("client_email"),
+            "client_id": creds_base.get("client_id")
+        }
+        gc = gspread.service_account_from_dict(credentials_dict)
+        sh = gc.open_by_url(url_planilla_alumnos)
+
+    # =================================================================
+    # LECTURA UNIFICADA (Alineada a 4 espacios: Corre para ambos entornos)
+    # =================================================================
+    worksheet = sh.get_worksheet(0) 
+    todos_los_datos = worksheet.get_all_records()
+    if todos_los_datos:
+        df_principal = pd.DataFrame(todos_los_datos)
+    else:
+        df_principal = pd.DataFrame()
+
+    error_conexion = None
+
+except Exception as e:
+    # Regresa al ras del borde izquierdo para cerrar el try principal
+    error_conexion = str(e)
+    df_principal = pd.DataFrame()
+
+# =================================================================
+# INTERFAZ DE USUARIO (Alineado al ras del borde izquierdo)
+# =================================================================
+
+if error_conexion:
+    st.error(f"❌ Error de Conexión: {error_conexion}")
+
+elif menu == "Dashboard":
+    # Acá abajo sigue tu código visual tal cual lo tenías...
+    if not df_principal.empty:
         col_usuario = [c for c in df_principal.columns if 'usuario' in c.lower() or 'alumno' in c.lower()]
-        
-        # Sanitizamos el nombre del alumno para usarlo de forma segura en las KEYS de React
         alumno_safe = str(alumno_actual).lower().replace(' ', '_') if alumno_actual else "admin"
 
         if alumno_actual and col_usuario:
@@ -283,7 +328,6 @@ if menu == "Dashboard":
         st.caption(f"📌 Vista actual: {texto_contexto}")
         
         if not df_dashboard.empty:
-            # Identificación de columnas clave
             col_p = [c for c in df_dashboard.columns if 'precio' in c or 'costo' in c][0]
             col_q = [c for c in df_dashboard.columns if 'cantidad' in c or 'stock' in c][0]
             col_fecha = [c for c in df_dashboard.columns if 'fecha' in c]
@@ -296,24 +340,19 @@ if menu == "Dashboard":
             
             total_inventario = df_dashboard['valor_total'].sum()
             
-            # MÓDULO 1: Métricas con Keys estables y normalizadas (sin espacios)
             c1, c2, c3 = st.columns(3)
             c1.metric("Insumos Activos", len(df_dashboard), key=f"met_ins_act_{alumno_safe}")
             c2.metric("VALOR TOTAL STOCK", f"$ {total_inventario:,.2f}", key=f"met_val_tot_{alumno_safe}")
             c3.metric("Estado", "Auditoría Ok" if alumno_actual else "Modo Admin", key=f"met_est_{alumno_safe}")
             
             st.divider()
-
-            # MÓDULO 2: Acciones seguidas de links nativos (Cero HTML interactivo peligroso)
             st.write("📂 **Acciones del Sistema:**")
             
-            # Usamos st.link_button que es el componente nativo oficial y seguro para redirecciones
-            link_drive = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
+            link_drive = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"] if "connections" in st.secrets else "https://drive.google.com"
             st.link_button("🚀 VALIDAR EN GOOGLE DRIVE", url=link_drive, use_container_width=True)
             
             st.divider()
 
-            # MÓDULO 3: Planilla de Datos con Key Sanitizada
             with st.expander("👁️ Ver detalle de existencias (Ordenado por Fecha)"):
                 st.dataframe(
                     df_dashboard, 
@@ -327,6 +366,7 @@ if menu == "Dashboard":
         st.warning("⚠️ No se encontraron registros para procesar el Dashboard.")
 
 elif menu == "Inventario":
+    # 👈 ¡Acá engancha tu menú de forma limpia y continua!
     st.title("📦 Carga de Insumos")
     id_u = f"up_{st.session_state.alumno.replace(' ', '_')}"
     archivo = st.file_uploader("📁 Subir remito", type=["jpg", "png", "jpeg"], key=id_u)
