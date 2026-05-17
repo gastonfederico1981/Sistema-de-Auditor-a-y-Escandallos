@@ -384,7 +384,7 @@ elif menu == "Inventario":
     archivo = st.file_uploader("📁 Arrastrá tu planilla de Excel / CSV o Factura aquí", type=["xlsx", "xls", "csv"], key=id_u)
 
     if archivo:
-        # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
+        # 1. LEER Y PROCESAR EL ARCHIVO SUBIDO EN MEMORIA (df_remito)
         try:
             if archivo.name.endswith('.csv'):
                 df_remito = pd.read_csv(archivo, encoding='latin1')
@@ -411,7 +411,7 @@ elif menu == "Inventario":
                         
                         filas_a_insertar = []
                         
-                        # 2. MAPEO DE LAS COLUMNAS REALES DE TU ARCHIVO
+                        # 2. MAPEO DE LAS COLUMNAS REALES DE TU ARCHIVO (Callao)
                         for _, fila in df_remito.iterrows():
                             # Extraemos el producto (clave principal)
                             producto = fila.get('Producto', fila.get('producto', None))
@@ -425,7 +425,7 @@ elif menu == "Inventario":
                             if not proveedor_origen:
                                 proveedor_origen = 'Desconocido'
                             
-                            # 🛡️ EXTRACCIÓN SEGURA DE CANTIDAD (revisa 'Subtotal', luego 'cerrado', por último 1.0)
+                            # 🛡️ EXTRACCIÓN SEGURA DE CANTIDAD (Prioriza el stock físico neto de la sucursal)
                             raw_cantidad = fila.get('Subtotal', fila.get('cerrado', 1.0))
                             try:
                                 cantidad = float(raw_cantidad) if raw_cantidad is not None else 1.0
@@ -439,7 +439,7 @@ elif menu == "Inventario":
                             except:
                                 precio_unitario = 0.0
 
-                            # Estructura limpia de 8 columnas para tu Google Sheets
+                            # Estructura limpia de 8 columnas para tu Google Sheets histórica
                             registro = [
                                 fecha_actual,                            # 1. Fecha
                                 st.session_state.alumno,                  # 2. Alumno / Sucursal
@@ -455,10 +455,10 @@ elif menu == "Inventario":
                         # 3. ESCRITURA DIRECTA EN EL SPREADSHEET DE GOOGLE
                         if filas_a_insertar:
                             try:
-                                # Seleccionamos la primera pestaña de la hoja
+                                # Seleccionamos la primera pestaña de la hoja (Historial de movimientos)
                                 worksheet_historico = sh.get_worksheet(0) 
                                 
-                                # Inserción masiva ultra-veloz y blindada anti-encabezados duplicados
+                                # Inserción masiva por coordenadas blindada anti-encabezados duplicados
                                 worksheet_historico.append_rows(
                                     filas_a_insertar, 
                                     value_input_option='USER_ENTERED',
