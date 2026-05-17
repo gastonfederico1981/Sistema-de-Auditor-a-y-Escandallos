@@ -372,24 +372,46 @@ elif menu == "Dashboard":
         st.warning("⚠️ No se encontraron registros para procesar el Dashboard.")
 
 elif menu == "Inventario":
-    # 👈 ¡Acá engancha tu menú de forma limpia y continua!
     st.title("📦 Carga de Insumos")
-    id_u = f"up_{st.session_state.alumno.replace(' ', '_')}"
-    archivo = st.file_uploader("📁 Subir remito", type=["jpg", "png", "jpeg"], key=id_u)
+    
+    # 🌟 Estabilizamos la Key y nos aseguramos de que acepte formatos correctos.
+    # Si vas a cargar imágenes de remitos físicos, dejamos estos types pero bien declarados.
+    id_u = f"uploader_inv_{st.session_state.alumno.replace(' ', '_')}"
+    archivo = st.file_uploader("📁 Subir remito físico", type=["jpg", "png", "jpeg"], key=id_u)
 
     if archivo:
         st.image(archivo, width=300)
-        with st.form(f"form_{st.session_state.alumno}"):
+        
+        # Estabilizamos el ID del formulario para que React no rompa el frontend
+        with st.form(key=f"form_carga_{st.session_state.alumno.replace(' ', '_')}"):
             st.subheader("Confirmar Datos")
-            insumo = st.selectbox("Insumo", df_principal['nombre'].tolist())
-            cantidad = st.number_input("Cantidad", value=1.0)
-            precio = st.number_input("Precio Unitario", value=0.0)
+            
+            # Evitamos que rompa si 'nombre' no existe en las columnas de tu DF maestro
+            opciones_insumos = []
+            if not df_principal.empty:
+                col_nombre = [c for c in df_principal.columns if 'nombre' in c.lower()]
+                if col_nombre:
+                    opciones_insumos = df_principal[col_nombre[0]].dropna().unique().tolist()
+            
+            if not opciones_insumos:
+                opciones_insumos = ["Ejemplo Insumo Base"] # Callback por seguridad
+                
+            insumo = st.selectbox("Insumo", opciones_insumos)
+            cantidad = st.number_input("Cantidad", min_value=0.1, value=1.0, step=1.0)
+            precio = st.number_input("Precio Unitario", min_value=0.0, value=0.0, step=10.0)
+            
             if st.form_submit_button("Generar Enlace"):
-                link = LINK_BASE.replace("NOMBRE", urllib.parse.quote(str(insumo)))
-                link = link.replace("111", str(cantidad)).replace("222", str(precio))
+                # Formateamos el link de forma segura
+                link_armado = LINK_BASE.replace("NOMBRE", urllib.parse.quote(str(insumo)))
+                link_armado = link_armado.replace("111", str(cantidad)).replace("222", str(precio))
+                
+                st.divider()
+                st.write("👉 **Presioná el botón dorado para registrar los datos:**")
+                
+                # 🌟 BOTÓN HTML LIMPIO Y CORREGIDO (Quitamos el código Streamlit mezclado dentro del string)
                 st.markdown(f'''
-                    st.link_button("🚀 VALIDAR EN GOOGLE DRIVE", url=link, use_container_width=True)
-                        <button style="background-color:#D4AF37;color:black;padding:18px;width:100%;border-radius:10px;font-weight:bold;cursor:pointer;border:none;font-size:16px;">
+                    <a href="{link_armado}" target="_blank" style="text-decoration: none;">
+                        <button style="background-color:#D4AF37; color:black; padding:18px; width:100%; border-radius:10px; font-weight:bold; cursor:pointer; border:none; font-size:16px; transition: 0.3s;">
                             🚀 VALIDAR EN GOOGLE DRIVE
                         </button>
                     </a>
