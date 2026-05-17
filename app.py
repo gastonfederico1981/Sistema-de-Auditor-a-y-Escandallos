@@ -416,57 +416,64 @@ elif menu == "Inventario":
                             # Extraemos el producto (clave principal)
                             producto = fila.get('Producto', fila.get('producto', None))
                             
-                            # Si la fila no tiene producto (está vacía al final), la salteamos
-                            if not producto:
+                            # Si la fila no tiene producto o está vacío, la salteamos limpiamente
+                            if not producto or str(producto).strip() == "":
                                 continue
                                 
                             # Mapeamos proveedor
                             proveedor_origen = fila.get('Proveedor', fila.get('proveedor', 'Desconocido'))
+                            if not proveedor_origen:
+                                proveedor_origen = 'Desconocido'
                             
-                            # Calculamos cantidad: prioriza el 'Total en $' o calcula según stock si corresponde
-                            # Modificá estos campos según qué columna represente el movimiento neto de stock
-                            cantidad = fila.get('Subtotal', fila.get('cerrado', 1.0))
-                            if cantidad is None:
+                            # 🛡️ EXTRACCIÓN SEGURA DE CANTIDAD (revisa 'Subtotal', luego 'cerrado', por último 1.0)
+                            raw_cantidad = fila.get('Subtotal', fila.get('cerrado', 1.0))
+                            try:
+                                cantidad = float(raw_cantidad) if raw_cantidad is not None else 1.0
+                            except:
                                 cantidad = 1.0
                                 
-                            # Mapeamos precio unitario
-                            precio_unitario = fila.get('Precio', fila.get('precio', 0.0))
-                            if precio_unitario is None:
+                            # 🛡️ EXTRACCIÓN SEGURA DE PRECIO UNITARIO
+                            raw_precio = fila.get('Precio', fila.get('precio', 0.0))
+                            try:
+                                precio_unitario = float(raw_precio) if raw_precio is not None else 0.0
+                            except:
                                 precio_unitario = 0.0
 
-                            # Estructura de 8 columnas que va a recibir tu Google Sheets
+                            # Estructura limpia de 8 columnas para tu Google Sheets
                             registro = [
-                                fecha_actual,            # 1. Fecha
-                                st.session_state.alumno,  # 2. Alumno / Sucursal
-                                tipo_movimiento,         # 3. Tipo de Registro
-                                str(producto),           # 4. Insumo / Producto
-                                float(cantidad),         # 5. Cantidad
-                                float(precio_unitario),   # 6. Precio Unitario
-                                str(proveedor_origen),   # 7. Proveedor
-                                str(observaciones)       # 8. Observaciones
+                                fecha_actual,                            # 1. Fecha
+                                st.session_state.alumno,                  # 2. Alumno / Sucursal
+                                tipo_movimiento,                         # 3. Tipo de Registro
+                                str(producto).strip(),                   # 4. Insumo / Producto
+                                cantidad,                                # 5. Cantidad
+                                precio_unitario,                         # 6. Precio Unitario
+                                str(proveedor_origen).strip(),           # 7. Proveedor
+                                str(observaciones).strip()               # 8. Observaciones
                             ]
                             filas_a_insertar.append(registro)
                         
-                        # 3. ESCRITURA DIRECTA EN EL SPREADSHEET DE GOOGLE
                         # 3. ESCRITURA DIRECTA EN EL SPREADSHEET DE GOOGLE
                         if filas_a_insertar:
                             try:
                                 # Seleccionamos la primera pestaña de la hoja
                                 worksheet_historico = sh.get_worksheet(0) 
                                 
-                                # 🛡️ USAMOS EL FORMATO DIRECTO POR COORDENADAS PARA EVITAR VALIDADORES DE ENCABEZADOS DUPLICADOS
+                                # Inserción masiva ultra-veloz y blindada anti-encabezados duplicados
                                 worksheet_historico.append_rows(
                                     filas_a_insertar, 
                                     value_input_option='USER_ENTERED',
-                                    insert_data_option='INSERT_ROWS' # Fuerza a meter filas abajo de todo
+                                    insert_data_option='INSERT_ROWS'
                                 )
                                 
-                                st.success(f"🔥 ¡Éxito! Se procesaron y grabaron {len(filas_a_insertar)} productos directamente en el Drive.")
+                                st.success(f"🔥 ¡Éxito! Se procesaron y grabaron {len(filas_a_insertar)} productos directamente en el Drive de {st.session_state.alumno}.")
                                 st.balloons()
                             except Exception as err_api:
                                 st.error(f"⚠️ Error de escritura en la API de Google: {str(err_api)}")
                         else:
                             st.warning("⚠️ No se encontraron filas válidas para cargar.")
+                            
+        except Exception as e:
+            st.error(f"⚠️ Error al procesar el archivo: {str(e)}")
 
 elif menu == "Escandallos":
     st.title("🍳 Calculadora de Fichas Técnicas")
