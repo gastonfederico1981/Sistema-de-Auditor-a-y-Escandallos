@@ -372,56 +372,76 @@ elif menu == "Dashboard":
         st.warning("⚠️ No se encontraron registros para procesar el Dashboard.")
 
 elif menu == "Inventario":
-    st.title("📦 Carga de Insumos")
-    
+    st.title("📦 Centro de Carga y Gestión de Stock")
+    st.caption(f"👤 Operando como: **{st.session_state.alumno}**")
+
+    # Selector de tipo de movimiento para organizar la base de datos
+    tipo_movimiento = st.selectbox(
+        "📝 Seleccionar Tipo de Registro",
+        ["Remito de Entrada (Stock)", "Factura de Compra (Proveedor)", "Control de Movimiento Manual"]
+    )
+
     id_u = f"uploader_inv_{st.session_state.alumno.replace(' ', '_')}"
-    # 🌟 Tu línea excelente que soluciona el selector de archivos:
-    archivo = st.file_uploader("📁 Subir remito", type=["xlsx", "xls", "csv"], key=id_u)
+    archivo = st.file_uploader("📁 Arrastrá tu planilla de Excel / CSV o Factura aquí", type=["xlsx", "xls", "csv"], key=id_u)
 
     if archivo:
-        # 🌟 NUEVO: En vez de st.image, leemos y mostramos la planilla real para control visual
+        # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
         try:
             if archivo.name.endswith('.csv'):
                 df_remito = pd.read_csv(archivo)
             else:
                 df_remito = pd.read_excel(archivo)
             
-            st.write("👀 **Previsualización del archivo cargado:**")
-            st.dataframe(df_remito.head(5), use_container_width=True, hide_index=True) # Muestra las primeras 5 filas
+            st.write("👀 **Verificación previa de las filas detectadas:**")
+            st.dataframe(df_remito.head(5), use_container_width=True, hide_index=True)
+            
+            # Formulario de confirmación final antes de impactar la base de datos en Drive
+            with st.form(key=f"form_grabado_directo_{st.session_state.alumno.replace(' ', '_')}"):
+                st.subheader("📋 Parámetros de Validación")
+                
+                # Campos de control que van a viajar a la base de datos junto con el archivo
+                proveedor = st.text_input("Proveedor / Origen", value="Gastronomía Central")
+                observaciones = st.text_input("Observaciones o N° Comprobante", value=f"Carga via {archivo.name}")
+                
+                if st.form_submit_button("💾 GRABAR DIRECTO EN GOOGLE DRIVE"):
+                    with st.spinner("💾 Conectando con la base de datos central y guardando movimientos..."):
+                        
+                        # 2. PREPARAR LOS DATOS PARA INSERTAR EN GOOGLE SHEETS
+                        # Agregamos metadatos clave para que cada alumno solo vea lo suyo en el futuro
+                        import datetime
+                        fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # Iteramos las filas del archivo cargado para pasarlas a una lista limpia
+                        filas_a_insertar = []
+                        for _, fila in df_remito.iterrows():
+                            # Mapeamos las columnas de tu Excel (ajustá los nombres según tus planillas)
+                            insumo_nombre = str(fila.get('Insumo', fila.get('nombre', 'Insumo Genérico')))
+                            cant_valores = float(fila.get('Cantidad', fila.get('cantidad', 1.0)))
+                            precio_valores = float(fila.get('Precio', fila.get('precio', 0.0)))
+                            
+                            # Formato de fila histórico: cada columna de tu Google Sheets
+                            registro = [
+                                fecha_actual,
+                                st.session_state.alumno,  # Alumno dueño del registro
+                                tipo_movimiento,
+                                insumo_nombre,
+                                cant_valores,
+                                precio_valores,
+                                proveedor,
+                                observaciones
+                            ]
+                            filas_a_insertar.append(registro)
+                        
+                        # 3. ESCRIBIR EN LA PLANILLA DE GOOGLE SHEETS (VÍA GSPREAD)
+                        # Buscamos la pestaña histórica de movimientos (la hoja 0 o una específica)
+                        worksheet_historico = sh.get_worksheet(0) 
+                        worksheet_historico.append_rows(filas_a_insertar, value_input_option='USER_ENTERED')
+                        
+                        st.success(f"🔥 ¡Éxito! Se grabaron correctamente {len(filas_a_insertar)} registros en el historial de {st.session_state.alumno}.")
+                        st.balloons()
+                        
         except Exception as e:
-            st.error("⚠️ No se pudo previsualizar el archivo. Asegurate de que no esté dañado o protegido.")
-        
-        # Continuamos con el formulario estable anti-crasheo de React
-        with st.form(key=f"form_carga_{st.session_state.alumno.replace(' ', '_')}"):
-            st.subheader("Confirmar Datos")
-            
-            opciones_insumos = []
-            if not df_principal.empty:
-                col_nombre = [c for c in df_principal.columns if 'nombre' in c.lower()]
-                if col_nombre:
-                    opciones_insumos = df_principal[col_nombre[0]].dropna().unique().tolist()
-            
-            if not opciones_insumos:
-                opciones_insumos = ["Ejemplo Insumo Base"]
-                
-            insumo = st.selectbox("Insumo", opciones_insumos)
-            cantidad = st.number_input("Cantidad", min_value=0.1, value=1.0, step=1.0)
-            precio = st.number_input("Precio Unitario", min_value=0.0, value=0.0, step=10.0)
-            
-            if st.form_submit_button("Generar Enlace"):
-                link_armado = LINK_BASE.replace("NOMBRE", urllib.parse.quote(str(insumo)))
-                link_armado = link_armado.replace("111", str(cantidad)).replace("222", str(precio))
-                
-                st.divider()
-                st.write("👉 **Presioná el botón dorado para registrar los datos:**")
-                
-                st.markdown(f'''
-                    <a href="{link_armado}" target="_blank" style="text-decoration: none;">
-                        <button style="background-color:#D4AF37; color:black; padding:18px; width:100%; border-radius:10px; font-weight:bold; cursor:pointer; border:none; font-size:16px;">
-                            🚀 VALIDAR EN GOOGLE DRIVE
-                        </button>
-                    </a>
-                ''', unsafe_allow_html=True)
+            st.error(f"⚠️ Error al procesar o escribir en Drive: {str(e)}")
 
 elif menu == "Escandallos":
     st.title("🍳 Calculadora de Fichas Técnicas")
