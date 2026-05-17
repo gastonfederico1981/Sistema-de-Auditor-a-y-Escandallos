@@ -375,7 +375,6 @@ elif menu == "Inventario":
     st.title("📦 Centro de Carga y Gestión de Stock")
     st.caption(f"👤 Operando como: **{st.session_state.alumno}**")
 
-    # Selector de tipo de movimiento para organizar la base de datos
     tipo_movimiento = st.selectbox(
         "📝 Seleccionar Tipo de Registro",
         ["Remito de Entrada (Stock)", "Factura de Compra (Proveedor)", "Control de Movimiento Manual"]
@@ -386,71 +385,78 @@ elif menu == "Inventario":
 
     if archivo:
         # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
-        # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
-        # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
-        # 1. LEER Y PROCESAR EL ARCHIVO EN MEMORIA
         try:
             if archivo.name.endswith('.csv'):
-                # 🛡️ Agregamos encoding='latin1' para que digiera eñes, acentos y eñes de Windows
                 df_remito = pd.read_csv(archivo, encoding='latin1')
             else:
                 df_remito = pd.read_excel(archivo)
             
-            # Limpieza anti-NaN nativa de Pandas (sin usar np)
-            df_remito = df_remito.fillna({
-                'Cantidad': 1.0, 'cantidad': 1.0,
-                'Precio': 0.0, 'precio': 0.0,
-                'Insumo': 'Insumo Genérico', 'nombre': 'Insumo Genérico'
-            })
+            # Limpieza anti-NaN nativa para asegurar que viaje sin errores JSON
             df_remito = df_remito.where(pd.notnull(df_remito), None)
             
-            st.write("👀 **Verificación previa de las filas detectadas (Limpio):**")
+            st.write("👀 **Verificación previa de las filas detectadas en tu planilla:**")
             st.dataframe(df_remito.head(5), use_container_width=True, hide_index=True)
             
-            # Formulario de confirmación final antes de impactar la base de datos en Drive
+            # Formulario de confirmación antes de impactar el Drive
             with st.form(key=f"form_grabado_directo_{st.session_state.alumno.replace(' ', '_')}"):
                 st.subheader("📋 Parámetros de Validación")
                 
-                # Campos de control que van a viajar a la base de datos junto con el archivo
-                proveedor = st.text_input("Proveedor / Origen", value="Gastronomía Central")
                 observaciones = st.text_input("Observaciones o N° Comprobante", value=f"Carga via {archivo.name}")
                 
                 if st.form_submit_button("💾 GRABAR DIRECTO EN GOOGLE DRIVE"):
-                    with st.spinner("💾 Conectando con la base de datos central y guardando movimientos..."):
+                    with st.spinner("💾 Procesando columnas e impactando en Google Drive..."):
                         
-                        # 2. PREPARAR LOS DATOS PARA INSERTAR EN GOOGLE SHEETS
-                        # Agregamos metadatos clave para que cada alumno solo vea lo suyo en el futuro
                         import datetime
                         fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         
-                        # Iteramos las filas del archivo cargado para pasarlas a una lista limpia
                         filas_a_insertar = []
+                        
+                        # 2. MAPEO DE LAS COLUMNAS REALES DE TU ARCHIVO
                         for _, fila in df_remito.iterrows():
-                            # Mapeamos las columnas de tu Excel (ajustá los nombres según tus planillas)
-                            insumo_nombre = str(fila.get('Insumo', fila.get('nombre', 'Insumo Genérico')))
-                            cant_valores = float(fila.get('Cantidad', fila.get('cantidad', 1.0)))
-                            precio_valores = float(fila.get('Precio', fila.get('precio', 0.0)))
+                            # Extraemos el producto (clave principal)
+                            producto = fila.get('Producto', fila.get('producto', None))
                             
-                            # Formato de fila histórico: cada columna de tu Google Sheets
+                            # Si la fila no tiene producto (está vacía al final), la salteamos
+                            if not producto:
+                                continue
+                                
+                            # Mapeamos proveedor
+                            proveedor_origen = fila.get('Proveedor', fila.get('proveedor', 'Desconocido'))
+                            
+                            # Calculamos cantidad: prioriza el 'Total en $' o calcula según stock si corresponde
+                            # Modificá estos campos según qué columna represente el movimiento neto de stock
+                            cantidad = fila.get('Subtotal', fila.get('cerrado', 1.0))
+                            if cantidad is None:
+                                cantidad = 1.0
+                                
+                            # Mapeamos precio unitario
+                            precio_unitario = fila.get('Precio', fila.get('precio', 0.0))
+                            if precio_unitario is None:
+                                precio_unitario = 0.0
+
+                            # Estructura de 8 columnas que va a recibir tu Google Sheets
                             registro = [
-                                fecha_actual,
-                                st.session_state.alumno,  # Alumno dueño del registro
-                                tipo_movimiento,
-                                insumo_nombre,
-                                cant_valores,
-                                precio_valores,
-                                proveedor,
-                                observaciones
+                                fecha_actual,            # 1. Fecha
+                                st.session_state.alumno,  # 2. Alumno / Sucursal
+                                tipo_movimiento,         # 3. Tipo de Registro
+                                str(producto),           # 4. Insumo / Producto
+                                float(cantidad),         # 5. Cantidad
+                                float(precio_unitario),   # 6. Precio Unitario
+                                str(proveedor_origen),   # 7. Proveedor
+                                str(observaciones)       # 8. Observaciones
                             ]
                             filas_a_insertar.append(registro)
                         
-                        # 3. ESCRIBIR EN LA PLANILLA DE GOOGLE SHEETS (VÍA GSPREAD)
-                        # Buscamos la pestaña histórica de movimientos (la hoja 0 o una específica)
-                        worksheet_historico = sh.get_worksheet(0) 
-                        worksheet_historico.append_rows(filas_a_insertar, value_input_option='USER_ENTERED')
-                        
-                        st.success(f"🔥 ¡Éxito! Se grabaron correctamente {len(filas_a_insertar)} registros en el historial de {st.session_state.alumno}.")
-                        st.balloons()
+                        # 3. ESCRITURA DIRECTA EN EL SPREADSHEET DE GOOGLE
+                        if filas_a_insertar:
+                            # sh es tu variable de conexión que ya declaramos arriba en la app
+                            worksheet_historico = sh.get_worksheet(0) 
+                            worksheet_historico.append_rows(filas_a_insertar, value_input_option='USER_ENTERED')
+                            
+                            st.success(f"🔥 ¡Éxito! Se procesaron y grabaron {len(filas_a_insertar)} productos directamente en el Drive.")
+                            st.balloons()
+                        else:
+                            st.warning("⚠️ No se encontraron filas válidas para cargar.")
                         
         except Exception as e:
             st.error(f"⚠️ Error al procesar o escribir en Drive: {str(e)}")
