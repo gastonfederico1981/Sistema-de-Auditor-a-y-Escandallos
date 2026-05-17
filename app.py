@@ -223,11 +223,12 @@ if menu == "Dashboard":
     # CONEXIÓN ENCAPSULADA (Sin elementos visuales que rompan el DOM)
     # =================================================================
     try:
-        import os
+        
         ruta_local_creds = r"C:\Users\gaston carranza\OneDrive\Desktop\Carranza Control v1.0\credenciales.json" [cite: User Summary]
         
-        if os.path.exists(ruta_local_creds): [cite: User Summary]
-            gc = gspread.service_account(filename=ruta_local_creds) [cite: User Summary]
+       if os.path.exists(ruta_local_creds): #
+            # Control de Producción 2026 - Bypass local activo
+            gc = gspread.service_account(filename=ruta_local_creds)
             try:
                 url_alumnos = st.secrets["connections"]["gsheets_alumnos"]["spreadsheet"]
                 sh = gc.open_by_url(url_alumnos)

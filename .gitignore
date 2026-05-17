@@ -1,0 +1,15 @@
+# Bloqueo absoluto de credenciales de Google
+*.json
+credenciales_oficiales.json
+credenciales.json
+credenciales.json.json
+credenciales_generadas.json
+
+# Streamlit local
+.streamlit/
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# Python caché
+__pycache__/
+*.pyc
