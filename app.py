@@ -374,19 +374,27 @@ elif menu == "Dashboard":
 elif menu == "Inventario":
     st.title("📦 Carga de Insumos")
     
-    # 🌟 Estabilizamos la Key y nos aseguramos de que acepte formatos correctos.
-    # Si vas a cargar imágenes de remitos físicos, dejamos estos types pero bien declarados.
     id_u = f"uploader_inv_{st.session_state.alumno.replace(' ', '_')}"
-    archivo = st.file_uploader("📁 Subir remito físico", type=["jpg", "png", "jpeg"], key=id_u)
+    # 🌟 Tu línea excelente que soluciona el selector de archivos:
+    archivo = st.file_uploader("📁 Subir remito", type=["xlsx", "xls", "csv"], key=id_u)
 
     if archivo:
-        st.image(archivo, width=300)
+        # 🌟 NUEVO: En vez de st.image, leemos y mostramos la planilla real para control visual
+        try:
+            if archivo.name.endswith('.csv'):
+                df_remito = pd.read_csv(archivo)
+            else:
+                df_remito = pd.read_excel(archivo)
+            
+            st.write("👀 **Previsualización del archivo cargado:**")
+            st.dataframe(df_remito.head(5), use_container_width=True, hide_index=True) # Muestra las primeras 5 filas
+        except Exception as e:
+            st.error("⚠️ No se pudo previsualizar el archivo. Asegurate de que no esté dañado o protegido.")
         
-        # Estabilizamos el ID del formulario para que React no rompa el frontend
+        # Continuamos con el formulario estable anti-crasheo de React
         with st.form(key=f"form_carga_{st.session_state.alumno.replace(' ', '_')}"):
             st.subheader("Confirmar Datos")
             
-            # Evitamos que rompa si 'nombre' no existe en las columnas de tu DF maestro
             opciones_insumos = []
             if not df_principal.empty:
                 col_nombre = [c for c in df_principal.columns if 'nombre' in c.lower()]
@@ -394,24 +402,22 @@ elif menu == "Inventario":
                     opciones_insumos = df_principal[col_nombre[0]].dropna().unique().tolist()
             
             if not opciones_insumos:
-                opciones_insumos = ["Ejemplo Insumo Base"] # Callback por seguridad
+                opciones_insumos = ["Ejemplo Insumo Base"]
                 
             insumo = st.selectbox("Insumo", opciones_insumos)
             cantidad = st.number_input("Cantidad", min_value=0.1, value=1.0, step=1.0)
             precio = st.number_input("Precio Unitario", min_value=0.0, value=0.0, step=10.0)
             
             if st.form_submit_button("Generar Enlace"):
-                # Formateamos el link de forma segura
                 link_armado = LINK_BASE.replace("NOMBRE", urllib.parse.quote(str(insumo)))
                 link_armado = link_armado.replace("111", str(cantidad)).replace("222", str(precio))
                 
                 st.divider()
                 st.write("👉 **Presioná el botón dorado para registrar los datos:**")
                 
-                # 🌟 BOTÓN HTML LIMPIO Y CORREGIDO (Quitamos el código Streamlit mezclado dentro del string)
                 st.markdown(f'''
                     <a href="{link_armado}" target="_blank" style="text-decoration: none;">
-                        <button style="background-color:#D4AF37; color:black; padding:18px; width:100%; border-radius:10px; font-weight:bold; cursor:pointer; border:none; font-size:16px; transition: 0.3s;">
+                        <button style="background-color:#D4AF37; color:black; padding:18px; width:100%; border-radius:10px; font-weight:bold; cursor:pointer; border:none; font-size:16px;">
                             🚀 VALIDAR EN GOOGLE DRIVE
                         </button>
                     </a>
