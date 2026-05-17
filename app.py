@@ -4,7 +4,7 @@ import gspread
 from datetime import datetime
 import os
 import urllib.parse
-
+import numpy as np
 
 # =================================================================
 # CONFIGURACIÓN DE PÁGINA (Debe ser SIEMPRE la primera línea)
@@ -404,7 +404,7 @@ elif menu == "Inventario":
                 'nombre': 'Insumo Genérico'
             })
             # Para cualquier otra columna que ande dando vueltas vacía (como observaciones), le ponemos texto vacío
-            df_remito = df_remito.replace({np.nan: None}) 
+            df_remito = df_remito.where(pd.notnull(df_remito), None) 
             
             st.write("👀 **Verificación previa de las filas detectadas (Limpio):**")
             st.dataframe(df_remito.head(5), use_container_width=True, hide_index=True)
