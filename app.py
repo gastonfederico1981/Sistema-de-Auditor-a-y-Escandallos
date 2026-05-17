@@ -277,14 +277,20 @@ try:
         else:
             raise KeyError("Faltan las credenciales relacionales en la nube.")
 
+        # Armamos el diccionario asegurando que CADA campo requerido por Google exista sí o sí
         credentials_dict = {
-            "type": creds_base.get("type", "service_account"),
+            "type": "service_account",
             "project_id": creds_base.get("project_id"),
             "private_key_id": creds_base.get("private_key_id"),
             "private_key": creds_base.get("private_key").replace("\\n", "\n") if creds_base.get("private_key") else None,
             "client_email": creds_base.get("client_email"),
-            "client_id": creds_base.get("client_id")
+            "client_id": creds_base.get("client_id"),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",  # 🛡️ ESCUDO: Forzado explícitamente para evitar el error
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{creds_base.get('client_email', '').replace('@', '%40')}"
         }
+        
         gc = gspread.service_account_from_dict(credentials_dict)
         sh = gc.open_by_url(url_planilla_alumnos)
 
